@@ -60,8 +60,8 @@ Olas is a cutting-edge decentralized social media application built on the [Nost
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/pablof7z/Olas.git
-cd Olas
+git clone https://github.com/pablof7z/Olas-iOS.git
+cd Olas-iOS
 ```
 
 2. Install XcodeGen if you haven't already:
