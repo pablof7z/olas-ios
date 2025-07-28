@@ -2,13 +2,12 @@ import SwiftUI
 import NDKSwift
 
 struct ContentView: View {
-    @Environment(NostrManager.self) private var nostrManager
     @EnvironmentObject var appState: AppState
     
     var body: some View {
-        if let ndk = nostrManager.ndk {
+        if let ndk = appState.ndk {
             Group {
-                if appState.authManager.isAuthenticated {
+                if appState.isAuthenticated {
                     // Authenticated content
                     MainTabView()
                 } else {

@@ -18,7 +18,7 @@ settings:
 packages:
   NDKSwift:
     url: https://github.com/pablof7z/NDKSwift
-    branch: master
+    revision: dba57b0108cde09d918f5699e94c09f80e82bb98
 targets:
   Olas:
     type: application

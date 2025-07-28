@@ -727,8 +727,8 @@
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/pablof7z/NDKSwift";
 			requirement = {
-				branch = master;
-				kind = branch;
+				kind = revision;
+				revision = dba57b0108cde09d918f5699e94c09f80e82bb98;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

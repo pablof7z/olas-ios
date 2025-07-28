@@ -2,7 +2,6 @@ import SwiftUI
 import NDKSwift
 
 struct CreateAccountView: View {
-    @Environment(NostrManager.self) private var nostrManager
     @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) var dismiss
     @State private var mnemonic: [String] = []
@@ -91,23 +90,24 @@ struct CreateAccountView: View {
     }
     
     private func generateKeys() {
-        // In a real app, generate mnemonic properly
-        // This is just a placeholder
-        mnemonic = ["example", "words", "would", "be", "generated", "here", 
-                   "using", "proper", "bip39", "implementation", "for", "security"]
-        privateKey = "generated_private_key_here"
+        // Generate a new private key
+        do {
+            let signer = try NDKPrivateKeySigner.generate()
+            privateKey = signer.privateKey(format: .nsec)
+            
+            // For display purposes, show some placeholder mnemonic
+            // In a real app, you would generate proper BIP39 mnemonic
+            mnemonic = ["your", "recovery", "phrase", "would", "appear", "here", 
+                       "save", "these", "words", "securely", "for", "backup"]
+        } catch {
+            print("Failed to generate keys: \(error)")
+        }
     }
     
     private func completeAccountCreation() {
         Task {
             do {
-                let signer = try NDKPrivateKeySigner(privateKey: privateKey)
-                nostrManager.ndk?.signer = signer
-                
-                let user = try NDKUser(pubkey: signer.publicKey(format: .hex))
-                appState.currentUser = user
-                appState.isAuthenticated = true
-                
+                try await appState.createAccount()
                 dismiss()
             } catch {
                 print("Account creation failed: \(error)")
