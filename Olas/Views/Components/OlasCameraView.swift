@@ -211,13 +211,13 @@ struct OlasCameraView: View {
         timerCountdown = seconds
         
         Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { timer in
-            if timerCountdown > 1 {
-                timerCountdown -= 1
+            if self.timerCountdown > 1 {
+                self.timerCountdown -= 1
                 OlasDesign.Haptic.impact(.light)
             } else {
                 timer.invalidate()
-                isCountingDown = false
-                performCapture()
+                self.isCountingDown = false
+                self.performCapture()
             }
         }
     }

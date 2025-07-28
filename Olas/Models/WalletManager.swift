@@ -1,606 +1,456 @@
 import Foundation
 import NDKSwift
+import CashuSwift
 import SwiftUI
+
+// JSONCoding is from NDKSwift
+let JSONCoding = NDKSwift.JSONCoding.self
 
 @MainActor
 class OlasWalletManager: ObservableObject {
-    @Published var activeWallet: NIP60Wallet?
+    @Published var wallet: NIP60Wallet?
     @Published var isLoading = false
     @Published var error: Error?
-    @Published var currentBalance: Int64 = 0
-    @Published var mintURLs: [String] = []
-    @Published var mintBalances: [String: Int64] = [:]
-    @Published var pendingAmount: Int64 = 0
-    @Published var activeTokens: [WalletToken] = []
-    @Published var pendingInvoices: [String: (amount: Int64, description: String, expiry: Date)] = [:]
     
+    /// Get current balance directly from the wallet
+    var currentBalance: Int64 {
+        get async {
+            guard let wallet = wallet else { return 0 }
+            return (try? await wallet.getBalance()) ?? 0
+        }
+    }
+    
+    /// Get transactions directly from the wallet's transaction history
+    var transactions: [WalletTransaction] {
+        get async {
+            guard let wallet = wallet else { return [] }
+            return await wallet.getRecentTransactions(limit: 50)
+        }
+    }
+    
+    /// Indicates if the wallet is properly configured with at least one mint
     var isWalletConfigured: Bool {
-        return activeWallet != nil && !mintURLs.isEmpty
-    }
-    
-    // Enhanced transaction with more details
-    @Published var recentTransactions: [WalletTransaction] = []
-    
-    enum TransactionType {
-        case sent
-        case received
-        case zapped
-        case nutzapped
-        case minted
-        case melted
-        case swapped
-    }
-    
-    struct WalletTransaction: Identifiable {
-        let id = UUID()
-        let type: TransactionType
-        let amount: Int64
-        let description: String
-        let timestamp: Date
-        let mint: String?
-        let invoice: String?
-        let fee: Int64?
-        let status: TransactionStatus
-        let direction: Direction?
-        
-        enum TransactionStatus {
-            case pending
-            case completed
-            case failed
-        }
-        
-        enum Direction {
-            case incoming
-            case outgoing
+        get async {
+            guard let wallet = wallet else { return false }
+            let mints = await wallet.mints.getMintURLs()
+            return !mints.isEmpty
         }
     }
+    
+    // Guard against duplicate initialization
+    private var isInitializingWallet = false
+    
     
     private let nostrManager: NostrManager
-    private var walletEventTask: Task<Void, Never>?
-    // Simplified wallet state - in production would use CashuSwift
-    private var walletState: WalletState = WalletState()
     
     init(nostrManager: NostrManager) {
         self.nostrManager = nostrManager
     }
     
-    deinit {
-        walletEventTask?.cancel()
-    }
-    
     // MARK: - Wallet Operations
     
-    /// Load or create wallet for current user
-    func loadWallet() async throws {
-        print("💰 OlasWalletManager.loadWallet() called")
-        guard nostrManager.isAuthenticated else {
+    /// Load wallet for currently authenticated user
+    func loadWalletForCurrentUser() async throws {
+        print("💰 OlasWalletManager.loadWalletForCurrentUser() called")
+        guard NDKAuthManager.shared.isAuthenticated else {
+            print("💰 Not authenticated, throwing error")
             throw WalletError.notAuthenticated
         }
         
-        guard let ndk = nostrManager.ndk else {
+        print("💰 Calling loadWallet()")
+        try await loadWallet()
+    }
+    
+    /// Load wallet from NIP-60 events
+    func loadWallet() async throws {
+        print("💰 OlasWalletManager.loadWallet() called")
+        guard nostrManager.ndk != nil else {
+            print("💰 NDK not initialized, throwing error")
             throw WalletError.ndkNotInitialized
         }
         
         isLoading = true
         defer { isLoading = false }
         
-        do {
-            // Create or load NIP60 wallet
-            let wallet = try NIP60Wallet(ndk: ndk)
-            activeWallet = wallet
-            
-            // Initialize with default mints if needed
-            if mintURLs.isEmpty {
-                mintURLs = [
-                    "https://mint.minibits.cash/Bitcoin",
-                    "https://testnut.cashu.space",
-                    "https://8333.space:3338"
-                ]
-            }
-            
-            // Initialize wallet state
-            await initializeWallet()
-            
-            // Start monitoring wallet events
-            await startWalletEventMonitoring()
-            
-            // Load balances from all mints
-            await updateAllBalances()
-            
-            // Load existing tokens from storage
-            await loadStoredTokens()
-            
-            print("💰 Wallet loaded successfully with \(activeTokens.count) tokens")
-        } catch {
-            self.error = error
-            print("💰 Error loading wallet: \(error)")
-            throw error
+        print("💰 Calling ensureWalletExists()")
+        // Ensure wallet exists (creates if needed)
+        try await ensureWalletExists()
+        
+        guard wallet != nil else {
+            print("💰 No wallet after ensureWalletExists, throwing error")
+            throw WalletError.noActiveWallet
+        }
+        
+        print("💰 Wallet loaded successfully")
+    }
+    
+    /// Ensure wallet exists (called automatically by loadWallet)
+    private func ensureWalletExists() async throws {
+        print("💰 OlasWalletManager.ensureWalletExists() called")
+        guard !isInitializingWallet else {
+            print("💰 Already initializing wallet, skipping duplicate call")
+            return
+        }
+        
+        guard let ndk = nostrManager.ndk else {
+            print("💰 NDK not initialized")
+            throw WalletError.ndkNotInitialized
+        }
+        
+        // Wait for signer to be available before creating wallet
+        guard let signer = ndk.signer else {
+            print("💰 Signer not available")
+            throw WalletError.signerNotAvailable
+        }
+        
+        isInitializingWallet = true
+        defer { isInitializingWallet = false }
+        
+        let userPubkey = try await signer.pubkey
+        print("💰 Got user pubkey: \(userPubkey.prefix(8))...")
+        
+        // Create NIP60Wallet instance with cache if available
+        print("💰 Creating NIP60Wallet instance")
+        let ndkWallet = try NIP60Wallet(ndk: ndk, cache: nostrManager.cache)
+        
+        // Set the wallet
+        self.wallet = ndkWallet
+        print("💰 Wallet set")
+        
+        // Register the wallet with the zap manager if available
+        if let zapManager = nostrManager.zapManager {
+            await zapManager.register(provider: ndkWallet)
+        }
+        
+        // Load wallet - this will fetch initial config and subscribe to wallet events
+        print("💰 Calling ndkWallet.load()")
+        try await ndkWallet.load()
+        print("💰 ndkWallet.load() completed")
+        
+        // Check if wallet has mints configured
+        let fetchedMintURLs = await ndkWallet.mints.getMintURLs()
+        print("💰 Current mint URLs: \(fetchedMintURLs)")
+        if fetchedMintURLs.isEmpty {
+            print("⚠️ OlasWalletManager - No mints configured. User needs to add mints in wallet settings.")
+        } else {
+            print("✅ OlasWalletManager - Wallet loaded with \(fetchedMintURLs.count) mints")
         }
     }
     
-    /// Initialize wallet state
-    private func initializeWallet() async {
-        // In production, would connect to actual mints
-        for mintURL in mintURLs {
-            walletState.mintInfo[mintURL] = WalletState.MintInfo(
-                name: mintURL.replacingOccurrences(of: "https://", with: ""),
-                publicKey: "mock-public-key",
-                version: "0.1.0"
-            )
-            print("💰 Connected to mint: \(mintURL)")
-        }
-    }
     
     /// Add a new mint
     func addMint(_ mintURL: String) async throws {
+        guard let wallet = wallet else {
+            throw WalletError.noActiveWallet
+        }
+        
         guard let url = URL(string: mintURL) else {
             throw WalletError.invalidMintURL
         }
         
-        // In production, test actual connection to mint
-        // For now, just validate URL format
-        guard url.scheme == "https" else {
-            throw WalletError.invalidMintURL
-        }
-        
-        // Add to list if successful
-        if !mintURLs.contains(mintURL) {
-            mintURLs.append(mintURL)
-            await updateMintBalance(mintURL)
-        }
+        await wallet.mints.addMintURL(url: url)
     }
     
     /// Remove a mint
     func removeMint(_ mintURL: String) async throws {
-        // Check if we have tokens from this mint
-        let tokensFromMint = activeTokens.filter { $0.mint == mintURL }
-        if !tokensFromMint.isEmpty {
-            throw WalletError.cannotRemoveMintWithTokens
+        guard let wallet = wallet else {
+            throw WalletError.noActiveWallet
         }
         
-        mintURLs.removeAll { $0 == mintURL }
-        mintBalances.removeValue(forKey: mintURL)
+        guard let url = URL(string: mintURL) else {
+            throw WalletError.invalidMintURL
+        }
+        
+        _ = await wallet.mints.removeMint(url: url)
     }
     
-    /// Send sats via Lightning invoice
-    func payInvoice(_ invoice: String, comment: String?) async throws {
-        guard !mintURLs.isEmpty else {
-            throw WalletError.walletNotConfigured
+    /// Pay a Lightning invoice
+    func payLightning(invoice: String, amount: Int64) async throws -> String {
+        guard let wallet = wallet else {
+            throw WalletError.noActiveWallet
         }
         
-        let primaryMint = mintURLs.first!
+        let (preimage, feePaid) = try await wallet.payLightning(
+            invoice: invoice,
+            amount: amount
+        )
         
-        isLoading = true
-        defer { isLoading = false }
+        print("💰 Paid Lightning invoice: \(amount) sats, fee: \(feePaid ?? 0) sats")
+        return preimage
+    }
+    
+    /// Send ecash tokens
+    func send(amount: Int64, memo: String?, fromMint: URL? = nil) async throws -> String {
+        guard let wallet = wallet else {
+            throw WalletError.noActiveWallet
+        }
         
-        do {
-            // Parse invoice to get amount
-            let invoiceAmount = try await getInvoiceAmount(invoice)
+        // Select mint if not specified
+        let selectedMintURL: URL
+        if let fromMint = fromMint {
+            selectedMintURL = fromMint
+        } else {
+            // Auto-select mint with sufficient balance
+            let mintURLs = await wallet.mints.getMintURLs()
+            let mints = mintURLs.compactMap { URL(string: $0) }
+            var selectedMint: URL?
             
-            guard currentBalance >= invoiceAmount else {
+            for mint in mints {
+                let balance = await wallet.getBalance(mint: mint)
+                if balance >= amount {
+                    selectedMint = mint
+                    break
+                }
+            }
+            
+            guard let selected = selectedMint else {
                 throw WalletError.insufficientBalance
             }
-            
-            // In production, get quote from mint
-            let feeReserve: Int64 = 10 // Mock fee
-            let totalAmount = invoiceAmount + feeReserve
-            
-            // Select tokens to spend
-            let tokensToSpend = selectTokensForAmount(totalAmount)
-            guard !tokensToSpend.isEmpty else {
-                throw WalletError.insufficientTokens
-            }
-            
-            // In production, melt tokens via mint API
-            // For now, just remove spent tokens
-            activeTokens.removeAll { token in
-                tokensToSpend.contains { $0.id == token.id }
-            }
-            
-            // Record transaction
-            let transaction = WalletTransaction(
-                type: .sent,
-                amount: invoiceAmount,
-                description: comment ?? "Lightning payment",
-                timestamp: Date(),
-                mint: primaryMint,
-                invoice: invoice,
-                fee: feeReserve,
-                status: .completed,
-                direction: .outgoing
-            )
-            recentTransactions.insert(transaction, at: 0)
-            
-            // Update balance
-            await updateAllBalances()
-            
-            print("💰 Successfully paid \(invoiceAmount) sats")
-        } catch {
-            print("💰 Payment failed: \(error)")
-            throw error
-        }
-    }
-    
-    /// Send ecash tokens directly
-    func sendEcash(amount: Int64, comment: String?) async throws -> String {
-        guard !mintURLs.isEmpty else {
-            throw WalletError.walletNotConfigured
+            selectedMintURL = selected
         }
         
-        isLoading = true
-        defer { isLoading = false }
+        // Generate P2PK pubkey for locking
+        let p2pkPubkey = try await wallet.getP2PKPubkey()
         
-        do {
-            // Select tokens for the amount
-            let tokensToSend = selectTokensForAmount(amount)
-            guard !tokensToSend.isEmpty else {
-                throw WalletError.insufficientTokens
-            }
-            
-            // Create cashu token string
-            let tokenString = try encodeCashuToken(tokensToSend)
-            
-            // Remove sent tokens from wallet
-            activeTokens.removeAll { token in
-                tokensToSend.contains { $0.id == token.id }
-            }
-            
-            // Record transaction
-            let transaction = WalletTransaction(
-                type: .sent,
-                amount: amount,
-                description: comment ?? "Sent ecash",
-                timestamp: Date(),
-                mint: tokensToSend.first?.mint,
-                invoice: nil,
-                fee: 0,
-                status: .completed,
-                direction: .outgoing
-            )
-            recentTransactions.insert(transaction, at: 0)
-            
-            // Update balance
-            await updateAllBalances()
-            
-            return tokenString
-        } catch {
-            print("💰 Failed to create ecash token: \(error)")
-            throw error
-        }
-    }
-    
-    /// Zap an event
-    func zapEvent(_ event: NDKEvent, amount: Int64, comment: String?) async throws {
-        guard activeWallet != nil else {
-            throw WalletError.walletNotConfigured
-        }
-        
-        isLoading = true
-        defer { isLoading = false }
-        
-        print("💰 Zapping event \(event.id) with \(amount) sats")
-        
-        // Add to transactions
-        let transaction = WalletTransaction(
-            type: .zapped,
+        // Send tokens (creates P2PK locked proofs)
+        let (proofs, _) = try await wallet.send(
             amount: amount,
-            description: comment ?? "Zapped a post",
-            timestamp: Date(),
-            mint: nil,
-            invoice: nil,
-            fee: 0,
-            status: .completed,
-            direction: .outgoing
+            to: p2pkPubkey,
+            mint: selectedMintURL
         )
-        recentTransactions.insert(transaction, at: 0)
         
-        // Update balance
-        currentBalance -= amount
+        // Create token from proofs
+        let token = CashuSwift.Token(
+            proofs: [selectedMintURL.absoluteString: proofs],
+            unit: "sat",
+            memo: memo
+        )
+        
+        // Encode token
+        let tokenData = try JSONCoding.encoder.encode(token)
+        guard String(data: tokenData, encoding: .utf8) != nil else {
+            throw WalletError.encodingError
+        }
+        
+        // Create base64url encoded token
+        let base64Token = tokenData.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        
+        let tokenString = "cashuA\(base64Token)"
+        
+        print("💰 Sent \(amount) sats")
+        return tokenString
     }
     
-    /// Generate a lightning invoice to receive payment
+    /// Send a nutzap
+    func sendNutzap(
+        to recipient: String,
+        amount: Int64,
+        comment: String?,
+        acceptedMints: [URL]
+    ) async throws {
+        print("💰 OlasWalletManager.sendNutzap called - recipient: \(recipient), amount: \(amount)")
+        
+        guard let wallet = wallet else {
+            print("❌ No wallet!")
+            throw WalletError.noActiveWallet
+        }
+        
+        // Create nutzap request
+        let request = NutzapPaymentRequest(
+            amountSats: amount,
+            recipientPubkey: recipient,
+            recipientP2PK: "", // Empty P2PK for now, will be set by wallet
+            acceptedMints: acceptedMints,
+            comment: comment
+        )
+        
+        print("💰 Created NutzapPaymentRequest, calling wallet.pay()")
+        
+        // Send nutzap
+        _ = try await wallet.pay(request)
+        
+        print("✅ Nutzap completed successfully!")
+    }
+    
+    /// Mint tokens from a Lightning invoice
+    func mintTokens(amount: Int64, mint mintURL: URL) async throws -> String {
+        guard let wallet = wallet else {
+            throw WalletError.noActiveWallet
+        }
+        
+        // Request mint quote
+        let mintQuote = try await wallet.mints.requestMintQuote(
+            amount: amount,
+            mintURL: mintURL.absoluteString
+        )
+        
+        // Return the Lightning invoice to be paid
+        return mintQuote.request
+    }
+    
+    /// Generate a Lightning invoice to receive payment
     func generateInvoice(amount: Int64, description: String?) async throws -> String {
-        guard let primaryMint = mintURLs.first else {
-            throw WalletError.walletNotConfigured
+        guard let wallet = wallet else {
+            throw WalletError.noActiveWallet
         }
         
-        isLoading = true
-        defer { isLoading = false }
-        
-        do {
-            // In production, get mint quote
-            // For now, generate mock invoice
-            let quote = UUID().uuidString
-            let invoice = "lnbc\(amount)1pjrmq3pp5" + UUID().uuidString.replacingOccurrences(of: "-", with: "")
-            
-            // Store pending invoice
-            pendingInvoices[quote] = (
-                amount: amount,
-                description: description ?? "Olas payment",
-                expiry: Date().addingTimeInterval(3600)
-            )
-            
-            // Start monitoring for payment
-            Task {
-                await monitorInvoicePayment(quote: quote, amount: amount)
-            }
-            
-            return invoice
-        } catch {
-            print("💰 Failed to generate invoice: \(error)")
-            throw error
+        // Get first available mint
+        let mintURLs = await wallet.mints.getMintURLs()
+        guard let firstMintString = mintURLs.first,
+              let mintURL = URL(string: firstMintString) else {
+            throw WalletError.noActiveWallet
         }
+        
+        // Request mint quote to get Lightning invoice
+        let mintQuote = try await wallet.mints.requestMintQuote(
+            amount: amount,
+            mintURL: mintURL.absoluteString
+        )
+        
+        // Return the Lightning invoice
+        return mintQuote.request
     }
     
     /// Receive ecash tokens
-    func receiveEcash(_ tokenString: String) async throws {
-        // In production, would use actual wallet
-        guard !mintURLs.isEmpty else {
-            throw WalletError.walletNotConfigured
+    func receive(tokenString: String) async throws -> Int64 {
+        guard let wallet = wallet else {
+            throw WalletError.noActiveWallet
         }
         
-        isLoading = true
-        defer { isLoading = false }
-        
-        do {
-            // Decode token string
-            let receivedTokens = try decodeCashuToken(tokenString)
-            
-            // In production, verify tokens with mint
-            // For now, just accept them
-            let validTokens = receivedTokens
-            
-            // Add to active tokens
-            activeTokens.append(contentsOf: validTokens)
-            
-            // Calculate total amount
-            let totalAmount = validTokens.reduce(0) { $0 + $1.amount }
-            
-            // Record transaction
-            let transaction = WalletTransaction(
-                type: .received,
-                amount: Int64(totalAmount),
-                description: "Received ecash",
-                timestamp: Date(),
-                mint: validTokens.first?.mint,
-                invoice: nil,
-                fee: 0,
-                status: .completed,
-                direction: .incoming
-            )
-            recentTransactions.insert(transaction, at: 0)
-            
-            // Update balance
-            await updateAllBalances()
-            
-            // Store tokens
-            await storeTokens()
-            
-            print("💰 Successfully received \(totalAmount) sats")
-        } catch {
-            print("💰 Failed to receive ecash: \(error)")
-            throw error
-        }
-    }
-    
-    /// Monitor invoice payment
-    private func monitorInvoicePayment(quote: String, amount: Int64) async {
-        guard let primaryMint = mintURLs.first else { return }
-        
-        // Poll for payment (in production, use websocket)
-        for _ in 0..<60 { // Check for 5 minutes
-            do {
-                // In production, mint tokens from paid invoice
-                // For now, create mock tokens
-                let tokens = [
-                    WalletToken(amount: UInt64(amount), mint: primaryMint)
-                ]
-                
-                // Payment successful
-                activeTokens.append(contentsOf: tokens)
-                
-                // Remove from pending
-                pendingInvoices.removeValue(forKey: quote)
-                
-                // Record transaction
-                let transaction = WalletTransaction(
-                    type: .received,
-                    amount: amount,
-                    description: "Lightning payment received",
-                    timestamp: Date(),
-                    mint: primaryMint,
-                    invoice: nil,
-                    fee: 0,
-                    status: .completed,
-                    direction: .incoming
-                )
-                
-                await MainActor.run {
-                    recentTransactions.insert(transaction, at: 0)
-                }
-                
-                // Update balance
-                await updateAllBalances()
-                
-                // Store tokens
-                await storeTokens()
-                
-                print("💰 Invoice paid: \(amount) sats received")
-                return
-            } catch {
-                // Not paid yet, wait and retry
-                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
-            }
-        }
-        
-        // Invoice expired
-        await MainActor.run {
-            pendingInvoices.removeValue(forKey: quote)
-        }
-    }
-    
-    // MARK: - Private Methods
-    
-    private func startWalletEventMonitoring() async {
-        walletEventTask?.cancel()
-        
-        guard let ndk = nostrManager.ndk else { return }
-        
-        walletEventTask = Task {
-            // Monitor for wallet events
-            // In a real implementation, this would monitor proper wallet event kinds
-            // For now, we'll just monitor for zap receipts
-            guard let userPubkey = ndk.signer?.pubkey else { return }
-            
-            let filter = NDKFilter(
-                authors: [userPubkey],
-                kinds: [EventKind.zap]
-            )
-            
-            do {
-                for await event in await ndk.observe(filters: [filter]) {
-                    await handleWalletEvent(event)
-                }
-            } catch {
-                print("💰 Error monitoring wallet events: \(error)")
-            }
-        }
-    }
-    
-    private func handleWalletEvent(_ event: NDKEvent) async {
-        print("💰 Received wallet event: kind \(event.kind)")
-        
-        // Handle different wallet event types
-        switch event.kind {
-        case EventKind.zap:
-            // Handle zap receipt
-            // In a real implementation, parse the zap receipt to update balance
-            await updateBalance()
-        default:
-            break
-        }
-    }
-    
-    private func updateAllBalances() async {
-        var totalBalance: Int64 = 0
-        
-        // Calculate balance from active tokens
-        for token in activeTokens {
-            totalBalance += Int64(token.amount)
-        }
-        
-        currentBalance = totalBalance
-        
-        // Update balance per mint
-        for mintURL in mintURLs {
-            await updateMintBalance(mintURL)
-        }
-    }
-    
-    private func updateMintBalance(_ mintURL: String) async {
-        let mintTokens = activeTokens.filter { $0.mint == mintURL }
-        let mintBalance = mintTokens.reduce(0) { $0 + Int64($1.amount) }
-        
-        await MainActor.run {
-            mintBalances[mintURL] = mintBalance
-        }
-    }
-    
-    /// Select tokens for a specific amount
-    private func selectTokensForAmount(_ amount: Int64) -> [WalletToken] {
-        var selectedTokens: [WalletToken] = []
-        var currentAmount: Int64 = 0
-        
-        // Sort tokens by amount (descending) for optimal selection
-        let sortedTokens = activeTokens.sorted { $0.amount > $1.amount }
-        
-        for token in sortedTokens {
-            if currentAmount >= amount {
-                break
-            }
-            selectedTokens.append(token)
-            currentAmount += Int64(token.amount)
-        }
-        
-        return currentAmount >= amount ? selectedTokens : []
-    }
-    
-    /// Get invoice amount from bolt11
-    private func getInvoiceAmount(_ invoice: String) async throws -> Int64 {
-        // In production, use proper bolt11 parsing
-        // For now, extract amount from invoice string
-        if let match = invoice.range(of: #"lnbc(\d+)"#, options: .regularExpression) {
-            let amountString = String(invoice[match]).replacingOccurrences(of: "lnbc", with: "")
-            if let amount = Int64(amountString) {
-                return amount * 1000 // Convert to millisats
-            }
-        }
-        throw WalletError.invalidInvoice
-    }
-    
-    /// Encode tokens to cashu token string
-    private func encodeCashuToken(_ tokens: [WalletToken]) throws -> String {
-        // In production, use proper cashu token encoding
-        // For now, create a simple representation
-        let tokenData = tokens.map { token in
-            ["amount": token.amount, "C": token.C, "id": token.id, "secret": token.secret, "mint": token.mint] as [String : Any]
-        }
-        
-        let jsonData = try JSONSerialization.data(withJSONObject: tokenData)
-        return "cashuA" + jsonData.base64EncodedString()
-    }
-    
-    /// Decode cashu token string
-    private func decodeCashuToken(_ tokenString: String) throws -> [WalletToken] {
-        // In production, use proper cashu token decoding
-        guard tokenString.hasPrefix("cashu") else {
+        // Parse token string to get amount first
+        guard tokenString.hasPrefix("cashuA") else {
             throw WalletError.invalidToken
         }
         
-        // For now, return empty array
-        return []
+        let base64Part = String(tokenString.dropFirst(6))
+        
+        // Convert base64url to base64
+        var base64 = base64Part
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        
+        // Add padding if needed
+        while base64.count % 4 != 0 {
+            base64.append("=")
+        }
+        
+        guard let tokenData = Data(base64Encoded: base64),
+              let token = try? JSONCoding.decoder.decode(CashuSwift.Token.self, from: tokenData) else {
+            throw WalletError.invalidToken
+        }
+        
+        // Calculate total amount from token (currently unused but may be needed for validation)
+        _ = token.proofsByMint.values.reduce(0) { sum, proofs in
+            sum + proofs.reduce(0) { $0 + Int64($1.amount) }
+        }
+        
+        var totalReceived: Int64 = 0
+        
+        // Process proofs from each mint
+        for (_, proofs) in token.proofsByMint {
+            // Receive the proofs - wallet can handle proofs from any mint
+            try await wallet.receive(proofs: proofs)
+            
+            // Calculate total
+            totalReceived += proofs.reduce(0) { $0 + Int64($1.amount) }
+        }
+        
+        print("💰 Successfully received \(totalReceived) sats")
+        return totalReceived
     }
     
-    /// Store tokens securely
-    private func storeTokens() async {
-        // In production, store encrypted in keychain
-        // For now, just log
-        print("💰 Storing \(activeTokens.count) tokens")
+    /// Get active mint URLs
+    func getActiveMintURLs() async -> [String] {
+        guard let wallet = wallet else { return [] }
+        return await wallet.mints.getMintURLs()
     }
     
-    /// Load stored tokens
-    private func loadStoredTokens() async {
-        // In production, load from keychain
-        // For now, start with empty tokens
-        activeTokens = []
+    /// Get mint balance
+    func getMintBalance(mint mintURL: URL) async -> Int64 {
+        guard let wallet = wallet else { return 0 }
+        return await wallet.getBalance(mint: mintURL)
+    }
+    
+    /// Get all mint balances
+    func getAllMintBalances() async -> [String: Int64] {
+        guard let wallet = wallet else { return [:] }
+        let mintURLs = await wallet.mints.getMintURLs()
+        var balances: [String: Int64] = [:]
+        
+        for mintString in mintURLs {
+            if let mintURL = URL(string: mintString) {
+                let balance = await wallet.getBalance(mint: mintURL)
+                balances[mintString] = balance
+            }
+        }
+        
+        return balances
+    }
+    
+    // MARK: - Session Management
+    
+    /// Clear all wallet data (called during logout)
+    func clearWalletData() {
+        // Clear wallet state
+        wallet = nil
+        
+        print("💰 OlasWalletManager - Cleared all wallet data")
+    }
+    
+    deinit {
+        print("💰 OlasWalletManager - Deallocated")
     }
 }
 
-// MARK: - Wallet Models
 
-struct WalletToken: Identifiable, Codable {
-    let id: String
-    let amount: UInt64
-    let secret: String
-    let C: String
-    let mint: String
-    
-    init(amount: UInt64, mint: String) {
-        self.id = UUID().uuidString
-        self.amount = amount
-        self.mint = mint
-        self.secret = UUID().uuidString // Simplified - in production use proper cryptography
-        self.C = UUID().uuidString // Simplified - in production use proper cryptography
+// MARK: - WalletTransaction Extensions
+
+extension WalletTransaction {
+    /// UI-friendly display description for transactions
+    var uiDisplayDescription: String {
+        if let memo = memo, !memo.isEmpty {
+            return memo
+        }
+        return displayDescription
     }
-}
-
-struct WalletState {
-    var mintInfo: [String: MintInfo] = [:]
     
-    struct MintInfo {
-        let name: String
-        let publicKey: String
-        let version: String
+    /// UI-friendly transaction type text
+    var uiTypeText: String {
+        switch type {
+        case .send:
+            return "Sent"
+        case .receive:
+            return "Received"
+        case .nutzapSent:
+            return "Zap Sent"
+        case .nutzapReceived:
+            return "Zap Received"
+        case .mint:
+            return "Minted"
+        case .melt:
+            return "Melted"
+        case .swap:
+            return "Swapped"
+        }
+    }
+    
+    /// Check if transaction is incoming for UI purposes
+    var isIncoming: Bool {
+        return direction == .incoming || type == .receive || type == .mint || type == .nutzapReceived
+    }
+    
+    /// Get the lightning invoice for display if available
+    var invoiceForDisplay: String? {
+        return lightningData?.invoice
+    }
+    
+    /// Get formatted mint URL for display
+    var formattedMintURL: String? {
+        guard let mint = mint else { return nil }
+        return mint.replacingOccurrences(of: "https://", with: "")
     }
 }
 
@@ -609,16 +459,12 @@ struct WalletState {
 enum WalletError: LocalizedError {
     case notAuthenticated
     case ndkNotInitialized
-    case walletNotConfigured
+    case noActiveWallet
     case insufficientBalance
-    case insufficientTokens
-    case invoiceGenerationFailed
-    case paymentFailed(String)
-    case invalidMintURL
-    case cannotRemoveMintWithTokens
-    case invalidInvoice
     case invalidToken
-    case mintConnectionFailed
+    case encodingError
+    case signerNotAvailable
+    case invalidMintURL
     
     var errorDescription: String? {
         switch self {
@@ -626,43 +472,18 @@ enum WalletError: LocalizedError {
             return "User not authenticated"
         case .ndkNotInitialized:
             return "NDK not initialized"
-        case .walletNotConfigured:
-            return "Wallet not configured"
+        case .noActiveWallet:
+            return "No wallet found"
         case .insufficientBalance:
             return "Insufficient balance"
-        case .insufficientTokens:
-            return "Not enough tokens for this amount"
-        case .invoiceGenerationFailed:
-            return "Failed to generate invoice"
-        case .paymentFailed(let reason):
-            return "Payment failed: \(reason)"
+        case .invalidToken:
+            return "Invalid token format"
+        case .encodingError:
+            return "Failed to encode data"
+        case .signerNotAvailable:
+            return "Signer not available yet"
         case .invalidMintURL:
             return "Invalid mint URL"
-        case .cannotRemoveMintWithTokens:
-            return "Cannot remove mint with active tokens"
-        case .invalidInvoice:
-            return "Invalid lightning invoice"
-        case .invalidToken:
-            return "Invalid ecash token"
-        case .mintConnectionFailed:
-            return "Failed to connect to mint"
         }
     }
-}
-
-// MARK: - NWC Response (simplified)
-
-private struct NWCResponse: Codable {
-    let result_type: String
-    let error: NWCError?
-    let result: NWCResult?
-}
-
-private struct NWCError: Codable {
-    let code: String
-    let message: String
-}
-
-private struct NWCResult: Codable {
-    let preimage: String?
 }

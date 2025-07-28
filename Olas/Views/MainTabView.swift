@@ -9,13 +9,6 @@ struct MainTabView: View {
     @State private var showCreatePost = false
     @State private var tabBarOpacity = 1.0
     @State private var tabBarOffset: CGFloat = 0
-    @StateObject private var dmManager: DirectMessagesManager
-    
-    init() {
-        // Initialize managers
-        let nostrManager = NostrManager()
-        self._dmManager = StateObject(wrappedValue: DirectMessagesManager(nostrManager: nostrManager))
-    }
     
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -27,6 +20,7 @@ struct MainTabView: View {
                 Label("Home", systemImage: selectedTab == 0 ? "house.fill" : "house")
             }
             .tag(0)
+            .accessibilityIdentifier("feedTab")
             
             // Explore/Search
             NavigationStack {
@@ -36,6 +30,7 @@ struct MainTabView: View {
                 Label("Explore", systemImage: selectedTab == 1 ? "magnifyingglass.circle.fill" : "magnifyingglass")
             }
             .tag(1)
+            .accessibilityIdentifier("exploreTab")
             
             // Create Post - presented as sheet
             Color.clear
@@ -43,6 +38,7 @@ struct MainTabView: View {
                     Label("Create", systemImage: "plus.square")
                 }
                 .tag(2)
+                .accessibilityIdentifier("createTab")
                 .onAppear {
                     if selectedTab == 2 {
                         showCreatePost = true
@@ -50,16 +46,6 @@ struct MainTabView: View {
                         selectedTab = previousTab
                     }
                 }
-            
-            // Messages Tab
-            NavigationStack {
-                MessagesListView(nostrManager: nostrManager)
-            }
-            .tabItem {
-                Label("Messages", systemImage: selectedTab == 3 ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
-            }
-            .tag(3)
-            .badge(dmManager.unreadCount > 0 ? "\(dmManager.unreadCount)" : nil)
             
             // Profile Tab with Wallet & Analytics Access
             Group {
@@ -76,9 +62,17 @@ struct MainTabView: View {
                                         }
                                         
                                         // Wallet
-                                        NavigationLink(destination: OlasWalletView(walletManager: OlasWalletManager(nostrManager: nostrManager), nostrManager: nostrManager)) {
+                                        if let walletManager = nostrManager.walletManager {
+                                            NavigationLink(destination: OlasWalletView(walletManager: walletManager, nostrManager: nostrManager)) {
+                                                Image(systemName: "bolt.circle")
+                                                    .foregroundStyle(OlasDesign.Colors.primary)
+                                            }
+                                        } else {
                                             Image(systemName: "bolt.circle")
-                                                .foregroundStyle(OlasDesign.Colors.primary)
+                                                .foregroundStyle(OlasDesign.Colors.textTertiary)
+                                                .onTapGesture {
+                                                    print("Wallet manager not initialized yet")
+                                                }
                                         }
                                     }
                                 }
@@ -89,18 +83,17 @@ struct MainTabView: View {
                 }
             }
             .tabItem {
-                Label("Profile", systemImage: selectedTab == 4 ? "person.circle.fill" : "person.circle")
+                Label("Profile", systemImage: selectedTab == 3 ? "person.circle.fill" : "person.circle")
             }
-            .tag(4)
+            .tag(3)
+            .accessibilityIdentifier("profileTab")
         }
+        .accessibilityIdentifier("mainTabBar")
         .tint(OlasDesign.Colors.primary)
         .onChange(of: selectedTab) { oldValue, newValue in
             if newValue != 2 {
                 previousTab = oldValue
             }
-        }
-        .task {
-            dmManager.startObservingMessages()
         }
         .sheet(isPresented: $showCreatePost) {
             CreatePostView()

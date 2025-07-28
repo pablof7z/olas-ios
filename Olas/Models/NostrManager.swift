@@ -13,12 +13,14 @@ class NostrManager {
     private var ndkAuthManager: NDKAuthManager
     var cache: NDKSQLiteCache?
     
-    // Declarative data sources
-    private(set) var userProfileDataSource: UserProfileDataSource?
     
     // Current user's profile
     private(set) var currentUserProfile: NDKUserProfile?
     private var profileObservationTask: Task<Void, Never>?
+    
+    // Wallet manager
+    private(set) var walletManager: OlasWalletManager?
+    var zapManager: NDKZapManager?
     
     // Default relays for Olas (visual content focused)
     let defaultRelays = [
@@ -59,6 +61,8 @@ class NostrManager {
             print("🎨 [OlasManager] Setting NDK on auth manager")
             ndkAuthManager.setNDK(ndk)
             
+            // Auth manager automatically restores sessions when NDK is set
+            
             // Configure NIP-89 client tags for Olas
             ndk.clientTagConfig = NDKClientTagConfig(
                 name: "Olas",
@@ -69,6 +73,16 @@ class NostrManager {
                 ]
             )
             print("🎨 [OlasManager] Configured NIP-89 client tags")
+            
+            // If authenticated after restore, initialize data sources
+            if ndkAuthManager.isAuthenticated {
+                if let signer = ndkAuthManager.activeSigner {
+                    Task {
+                        let pubkey = try await signer.pubkey
+                        await initializeDataSources(for: pubkey)
+                    }
+                }
+            }
         }
         
         Task {
@@ -110,7 +124,13 @@ class NostrManager {
     func login(with privateKey: String) async throws {
         guard let ndk = ndk else { throw OlasError.ndkNotInitialized }
         
-        let signer = try NDKPrivateKeySigner(privateKey: privateKey)
+        // Create signer - NDKPrivateKeySigner handles both nsec and hex formats
+        let signer: NDKPrivateKeySigner
+        if privateKey.hasPrefix("nsec1") {
+            signer = try NDKPrivateKeySigner(nsec: privateKey)
+        } else {
+            signer = try NDKPrivateKeySigner(privateKey: privateKey)
+        }
         
         // Start session with follow list and mute list support
         try await ndk.startSession(
@@ -120,6 +140,16 @@ class NostrManager {
                 preloadStrategy: .progressive
             )
         )
+        
+        // Create auth session for persistence
+        let session = try await ndkAuthManager.createSession(
+            with: signer,
+            requiresBiometric: false,
+            isHardwareBacked: false
+        )
+        
+        // Switch to the new session
+        try await ndkAuthManager.switchToSession(session)
         
         let publicKey = try await signer.pubkey
         print("Logged in with public key: \(publicKey)")
@@ -221,29 +251,38 @@ class NostrManager {
         profileObservationTask = nil
         currentUserProfile = nil
         
-        // Clean up data sources
-        userProfileDataSource = nil
         
-        // Clear all cached data and sessions
+        // Clear wallet data
+        walletManager?.clearWalletData()
+        walletManager = nil
+        
+        // CRITICAL: Delete sessions from keychain BEFORE calling logout
+        // This prevents the bug where old sessions are restored on app restart
         Task {
+            // 1. Clear cache data (optional but recommended for privacy)
             if let cache = cache {
                 try? await cache.clear()
                 print("Cleared all cached data")
             }
             
-            // Clear all sessions from keychain
+            // 2. Delete ALL sessions from keychain - this is critical!
+            // Must happen BEFORE ndkAuthManager.logout()
             for session in ndkAuthManager.availableSessions {
                 try? await ndkAuthManager.deleteSession(session)
             }
+            print("Deleted all sessions from keychain")
+            
+            // 3. NOW clear memory state after keychain is cleaned
+            await MainActor.run {
+                // Clear active authentication state
+                ndkAuthManager.logout()
+                
+                // Clear NDK signer
+                ndk?.signer = nil
+                
+                print("Logged out and cleared all authentication data")
+            }
         }
-        
-        // Clear active authentication state
-        ndkAuthManager.logout()
-        
-        // Clear NDK signer
-        ndk?.signer = nil
-        
-        print("Logged out and cleared all authentication data")
     }
     
     // MARK: - Auth State Management
@@ -284,8 +323,24 @@ class NostrManager {
             }
         }
         
-        // Initialize user profile data source (kept for compatibility)
-        userProfileDataSource = UserProfileDataSource(ndk: ndk, pubkey: pubkey)
+        
+        // Initialize wallet manager
+        walletManager = OlasWalletManager(nostrManager: self)
+        
+        // Initialize zap manager if needed
+        if zapManager == nil {
+            zapManager = NDKZapManager(ndk: ndk)
+        }
+        
+        // Load wallet in the background
+        Task {
+            do {
+                try await walletManager?.loadWalletForCurrentUser()
+                print("🎨 [OlasManager] Wallet loaded successfully")
+            } catch {
+                print("🎨 [OlasManager] Failed to load wallet: \(error)")
+            }
+        }
     }
     
     // MARK: - Relay Management
@@ -339,6 +394,13 @@ class NostrManager {
     var userAddedRelays: [String] {
         return getUserAddedRelays()
     }
+    
+    deinit {
+        Task { @MainActor in
+            profileObservationTask?.cancel()
+        }
+        print("🎨 NostrManager - Deallocated")
+    }
 }
 
 // MARK: - Error Types
@@ -346,13 +408,14 @@ class NostrManager {
 enum OlasError: LocalizedError {
     case ndkNotInitialized
     case invalidKey
+    case invalidPrivateKey
     case profileCreationFailed
     
     var errorDescription: String? {
         switch self {
         case .ndkNotInitialized:
             return "Network connection not ready. Please try again."
-        case .invalidKey:
+        case .invalidKey, .invalidPrivateKey:
             return "Invalid private key format."
         case .profileCreationFailed:
             return "Failed to create profile. Please try again."

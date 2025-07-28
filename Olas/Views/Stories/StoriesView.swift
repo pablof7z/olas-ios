@@ -127,8 +127,8 @@ struct StoriesView: View {
     }
     
     private func getUserInitial() -> String {
-        // Get current user's profile from storiesManager
-        if let currentUser = storiesManager?.currentUserProfile {
+        // Get current user's profile from nostrManager
+        if let currentUser = nostrManager.currentUserProfile {
             if let name = currentUser.name, !name.isEmpty {
                 return String(name.prefix(1)).uppercased()
             } else if let displayName = currentUser.displayName, !displayName.isEmpty {
@@ -417,12 +417,12 @@ struct StoryViewerView: View {
         timer?.invalidate()
         
         timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
-            if !isPaused {
+            if !self.isPaused {
                 withAnimation(.linear(duration: 0.05)) {
-                    progress += 0.01
+                    self.progress += 0.01
                     
-                    if progress >= 1 {
-                        nextStory()
+                    if self.progress >= 1 {
+                        self.nextStory()
                     }
                 }
             }

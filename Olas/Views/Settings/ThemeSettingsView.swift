@@ -292,7 +292,6 @@ struct ThemeSettingsView: View {
     }
     
     private func getAccentGradient() -> [Color] {
-        let base = getAccentColor()
         switch accentColor {
         case "Purple": return [.purple, .pink]
         case "Blue": return [.blue, .cyan]

@@ -117,51 +117,47 @@ struct WalletContactsScrollView: View {
     
     private func loadContacts() async {
         guard let ndk = nostrManager.ndk,
-              let userPubkey = ndk.signer?.pubkey else { return }
+              let userPubkey = try? await ndk.signer?.pubkey else { return }
         
         // Load contact list (kind 3)
         let filter = NDKFilter(
             authors: [userPubkey],
-            kinds: [EventKind.contactList],
+            kinds: [EventKind.contacts],
             limit: 1
         )
         
-        do {
-            let dataSource = ndk.observe(
-                filter: filter,
-                maxAge: 3600,
-                cachePolicy: .cacheWithNetwork
-            )
+        let dataSource = ndk.observe(
+            filter: filter,
+            maxAge: 3600,
+            cachePolicy: .cacheWithNetwork
+        )
             
-            for await event in dataSource.events {
-                // Extract pubkeys from tags
-                let pubkeys = event.tags
-                    .filter { $0.count >= 2 && $0[0] == "p" }
-                    .map { $0[1] }
-                    .prefix(10) // Limit to 10 for horizontal scroll
-                
-                // Load profiles
-                var loadedContacts: [(pubkey: String, profile: NDKUserProfile?)] = []
-                
-                for pubkey in pubkeys {
-                    if let profileManager = ndk.profileManager {
-                        let profile = await profileManager.fetchProfile(for: pubkey)
-                        loadedContacts.append((pubkey: pubkey, profile: profile))
+        for await event in dataSource.events {
+            // Extract pubkeys from tags
+            let pTags = event.tags.filter { $0.count >= 2 && $0[0] == "p" }
+            let pubkeyList = pTags.map { $0[1] }
+            let pubkeys = Array(pubkeyList.prefix(10)) // Limit to 10 for horizontal scroll
+            
+            // Load profiles
+            var loadedContacts: [(pubkey: String, profile: NDKUserProfile?)] = []
+            
+            for pubkey in pubkeys {
+                if let profileManager = ndk.profileManager {
+                    var profile: NDKUserProfile?
+                    for await p in await profileManager.observe(for: pubkey, maxAge: 3600) {
+                        profile = p
+                        break
                     }
+                    loadedContacts.append((pubkey: pubkey, profile: profile))
                 }
-                
-                await MainActor.run {
-                    self.contacts = loadedContacts
-                    self.isLoading = false
-                }
-                
-                break // Only need first contact list event
             }
-        } catch {
-            print("Error loading contacts: \(error)")
+            
             await MainActor.run {
+                self.contacts = loadedContacts
                 self.isLoading = false
             }
+            
+            break // Only need first contact list event
         }
     }
 }

@@ -1,0 +1,45 @@
+appId: com.olas.app
+---
+- launchApp
+
+# Wait for the app to load
+- waitForAnimationToEnd
+
+# Verify we're on the authentication screen
+- assertVisible: "Olas"
+- assertVisible: "Welcome back"
+
+# Tap "I Have an Account" button
+- tapOn: "I Have an Account"
+
+# Wait for login sheet
+- waitForAnimationToEnd
+
+# Verify login sheet elements
+- assertVisible: "Welcome Back"
+- assertVisible: "Enter your private key (nsec or hex format)"
+
+# Enter a hex private key (this is a test key - DO NOT use real keys in tests)
+- tapOn:
+    id: "privateKeyField"
+- inputText: "7f3b464b9ff3623630485983fdf8c44b4b8abfe3dcd3dc2fe8c9ed82e5d584f6"
+
+# Tap login button
+- tapOn: "Login"
+
+# Wait for login to complete
+- waitForAnimationToEnd:
+    timeout: 10000
+
+# Verify we're now on the main feed
+- assertVisible:
+    text: "Olas"
+    index: 0
+
+# Verify bottom tab bar is visible (indicates successful login)
+- assertVisible:
+    id: "mainTabBar"
+
+# Verify feed tab is selected
+- assertVisible:
+    id: "feedTab"

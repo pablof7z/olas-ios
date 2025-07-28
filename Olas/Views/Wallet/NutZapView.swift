@@ -16,6 +16,7 @@ struct NutZapView: View {
     @State private var isSending = false
     @State private var showSuccess = false
     @State private var errorMessage: String?
+    @State private var currentBalance: Int64 = 0
     
     @Environment(\.dismiss) private var dismiss
     
@@ -24,72 +25,18 @@ struct NutZapView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Background gradient
-                LinearGradient(
-                    colors: [
-                        OlasDesign.Colors.background,
-                        OlasDesign.Colors.surface.opacity(0.5)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-                
-                ScrollView {
-                    VStack(spacing: OlasDesign.Spacing.xl) {
-                        // Header with balance
-                        VStack(spacing: OlasDesign.Spacing.sm) {
-                            Text("⚡ NutZap")
-                                .font(OlasDesign.Typography.title)
-                                .foregroundStyle(OlasDesign.Colors.text)
-                            
-                            Text("Send ecash instantly")
-                                .font(OlasDesign.Typography.body)
-                                .foregroundStyle(OlasDesign.Colors.textSecondary)
-                            
-                            HStack(spacing: 4) {
-                                Text("Balance:")
-                                    .font(OlasDesign.Typography.caption)
-                                    .foregroundStyle(OlasDesign.Colors.textTertiary)
-                                
-                                Text("\(walletManager.currentBalance) sats")
-                                    .font(OlasDesign.Typography.captionMedium)
-                                    .foregroundStyle(OlasDesign.Colors.primary)
-                            }
-                        }
-                        .padding(.top, OlasDesign.Spacing.md)
-                        
-                        // Recipient selector
-                        if recipientPubkey == nil {
-                            recipientSelector
-                        } else if let userProfile = selectedUser {
-                            selectedRecipientCard(profile: userProfile, pubkey: recipientPubkey!)
-                        }
-                        
-                        // Amount selection
-                        amountSection
-                        
-                        // Comment field
-                        commentField
-                        
-                        // Send button
-                        sendButton
-                    }
-                    .padding(.horizontal, OlasDesign.Spacing.lg)
-                    .padding(.bottom, OlasDesign.Spacing.xl)
-                }
+                backgroundGradient
+                mainContent
             }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .foregroundStyle(OlasDesign.Colors.primary)
-                }
+                toolbarContent
             }
             .task {
+                // Load current balance
+                currentBalance = await walletManager.currentBalance
+                
                 if let pubkey = recipientPubkey {
                     await loadUserProfile(pubkey: pubkey)
                 }
@@ -109,6 +56,75 @@ struct NutZapView: View {
                 if let error = errorMessage {
                     Text(error)
                 }
+            }
+        }
+    }
+    
+    private var backgroundGradient: some View {
+        LinearGradient(
+            colors: [
+                OlasDesign.Colors.background,
+                OlasDesign.Colors.surface.opacity(0.5)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+    }
+    
+    private var mainContent: some View {
+        ScrollView {
+            VStack(spacing: OlasDesign.Spacing.xl) {
+                headerSection
+                recipientSection
+                amountSection
+                commentField
+                sendButton
+            }
+            .padding(.horizontal, OlasDesign.Spacing.lg)
+            .padding(.bottom, OlasDesign.Spacing.xl)
+        }
+    }
+    
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarLeading) {
+            Button("Cancel") {
+                dismiss()
+            }
+            .foregroundStyle(OlasDesign.Colors.primary)
+        }
+    }
+    
+    private var headerSection: some View {
+        VStack(spacing: OlasDesign.Spacing.sm) {
+            Text("⚡ NutZap")
+                .font(OlasDesign.Typography.title)
+                .foregroundStyle(OlasDesign.Colors.text)
+            
+            Text("Send ecash instantly")
+                .font(OlasDesign.Typography.body)
+                .foregroundStyle(OlasDesign.Colors.textSecondary)
+            
+            HStack(spacing: 4) {
+                Text("Balance:")
+                    .font(OlasDesign.Typography.caption)
+                    .foregroundStyle(OlasDesign.Colors.textTertiary)
+                
+                Text("\(currentBalance) sats")
+                    .font(OlasDesign.Typography.caption)
+                    .foregroundStyle(OlasDesign.Colors.primary)
+            }
+        }
+        .padding(.top, OlasDesign.Spacing.md)
+    }
+    
+    private var recipientSection: some View {
+        Group {
+            if recipientPubkey == nil {
+                recipientSelector
+            } else if let userProfile = selectedUser {
+                selectedRecipientCard(profile: userProfile, pubkey: recipientPubkey!)
             }
         }
     }
@@ -157,7 +173,7 @@ struct NutZapView: View {
     private func selectedRecipientCard(profile: NDKUserProfile, pubkey: String) -> some View {
         HStack(spacing: OlasDesign.Spacing.md) {
             // Avatar
-            if let avatarURL = profile.image {
+            if let avatarURL = profile.picture {
                 AsyncImage(url: URL(string: avatarURL)) { image in
                     image
                         .resizable()
@@ -324,17 +340,20 @@ struct NutZapView: View {
     }
     
     private func loadUserProfile(pubkey: String) async {
-        guard let ndk = nostrManager.ndk else { return }
+        guard let ndk = nostrManager.ndk,
+              let profileManager = ndk.profileManager else { return }
         
-        do {
-            if let profile = try await ndk.fetchProfile(pubkey: pubkey) {
-                await MainActor.run {
-                    self.selectedUser = profile
-                    self.selectedUserPubkey = pubkey
-                }
+        var foundProfile: NDKUserProfile?
+        for await profile in await profileManager.observe(for: pubkey, maxAge: 3600) {
+            foundProfile = profile
+            break // Just get the first one
+        }
+        
+        if let profile = foundProfile {
+            await MainActor.run {
+                self.selectedUser = profile
+                self.selectedUserPubkey = pubkey
             }
-        } catch {
-            print("Failed to load profile: \(error)")
         }
     }
     
@@ -353,13 +372,11 @@ struct NutZapView: View {
         
         // Try to decode npub
         if searchQuery.starts(with: "npub1") {
-            do {
-                let pubkey = try NDKUser.pubkeyFromNpub(searchQuery)
-                await loadUserProfile(pubkey: pubkey)
-                return
-            } catch {
-                print("Invalid npub: \(error)")
+            // For now, show error for npub search
+            await MainActor.run {
+                errorMessage = "npub search coming soon. Please use hex pubkey for now."
             }
+            return
         }
         
         // Search by name - for now just show error
@@ -382,9 +399,8 @@ struct NutZapView: View {
             }
         }
         
-        do {
-            // Find a recent event from the user to zap
-            guard let ndk = nostrManager.ndk else { return }
+        // Find a recent event from the user to zap
+        guard let ndk = nostrManager.ndk else { return }
             
             let filter = NDKFilter(
                 authors: [pubkey],
@@ -392,22 +408,46 @@ struct NutZapView: View {
                 limit: 1
             )
             
-            if let event = try await ndk.fetchEvent(filter: filter) {
-                try await walletManager.zapEvent(event, amount: selectedAmount, comment: comment.isEmpty ? nil : comment)
+            // Use observe to get an event
+            let dataSource = ndk.observe(
+                filter: filter,
+                maxAge: 0,
+                cachePolicy: .cacheOnly
+            )
+            
+            var foundEvent: NDKEvent?
+            for await event in dataSource.events {
+                foundEvent = event
+                break // Just get the first one
+            }
+            
+        if let event = foundEvent {
+            do {
+                // Get accepted mints (using default mints for now)
+                let mintURLs = await walletManager.getActiveMintURLs()
+                let acceptedMints = mintURLs.compactMap { URL(string: $0) }
+                
+                // Send nutzap to the event's author
+                try await walletManager.sendNutzap(
+                    to: event.pubkey,
+                    amount: selectedAmount,
+                    comment: comment.isEmpty ? nil : comment,
+                    acceptedMints: acceptedMints
+                )
                 
                 await MainActor.run {
                     showSuccess = true
                     OlasDesign.Haptic.success()
                 }
-            } else {
+            } catch {
                 await MainActor.run {
-                    errorMessage = "Couldn't find a recent post from this user to zap"
+                    errorMessage = error.localizedDescription
+                    OlasDesign.Haptic.error()
                 }
             }
-        } catch {
+        } else {
             await MainActor.run {
-                errorMessage = error.localizedDescription
-                OlasDesign.Haptic.error()
+                errorMessage = "Couldn't find a recent post from this user to zap"
             }
         }
     }

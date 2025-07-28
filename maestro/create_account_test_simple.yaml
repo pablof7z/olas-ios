@@ -1,0 +1,41 @@
+appId: com.olas.app
+---
+# Clear any previous onboarding state
+- clearState
+
+- launchApp
+
+# Wait for the app to load
+- waitForAnimationToEnd
+
+# Either we see authentication screen or onboarding
+# Try to tap "I'm New Here" if visible
+- runFlow:
+    when:
+      visible: "I'm New Here"
+    commands:
+      - tapOn: "I'm New Here"
+      - waitForAnimationToEnd
+
+# Now we should be in onboarding
+# Try swiping through onboarding pages
+- repeat:
+    times: 3
+    commands:
+      - swipe:
+          direction: LEFT
+      - waitForAnimationToEnd:
+          timeout: 3000
+
+# Look for "Get Started" button on the last page
+- runFlow:
+    when:
+      visible: "Get Started"
+    commands:
+      - tapOn: "Get Started"
+      - waitForAnimationToEnd:
+          timeout: 10000
+
+# Verify we made it to the main app
+- assertVisible:
+    id: "mainTabBar"

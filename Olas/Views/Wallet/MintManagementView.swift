@@ -10,6 +10,11 @@ struct MintManagementView: View {
     @State private var mintStats: [String: MintStats] = [:]
     @State private var animateCards = false
     
+    @State private var mintURLs: [String] = []
+    @State private var mintBalances: [String: Int64] = [:]
+    @State private var transactionCount: Int = 0
+    @State private var currentBalance: Int64 = 0
+    
     struct MintStats {
         let balance: Int64
         let tokenCount: Int
@@ -42,7 +47,7 @@ struct MintManagementView: View {
                             .padding(.top, OlasDesign.Spacing.md)
                         
                         // Mint Cards
-                        if walletManager.mintURLs.isEmpty {
+                        if mintURLs.isEmpty {
                             emptyStateView
                         } else {
                             mintCardsSection
@@ -82,7 +87,21 @@ struct MintManagementView: View {
                 }
             }
             .onAppear {
-                loadMintStats()
+        Task {
+            let urls = await walletManager.getActiveMintURLs()
+            let balances = await walletManager.getAllMintBalances()
+            let transactions = await walletManager.transactions
+            let balance = await walletManager.currentBalance
+            
+            DispatchQueue.main.async {
+                self.mintURLs = urls
+                self.mintBalances = balances
+                self.transactionCount = transactions.count
+                self.currentBalance = balance
+            }
+            
+            loadMintStats()
+        }
                 withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
                     animateCards = true
                 }
@@ -101,7 +120,7 @@ struct MintManagementView: View {
                     .foregroundStyle(OlasDesign.Colors.textSecondary)
                 
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(formatSats(walletManager.currentBalance))
+                    Text(formatSats(currentBalance))
                         .font(.system(size: 42, weight: .bold, design: .rounded))
                         .foregroundStyle(
                             LinearGradient(
@@ -111,7 +130,7 @@ struct MintManagementView: View {
                             )
                         )
                         .contentTransition(.numericText())
-                        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: walletManager.currentBalance)
+                        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: currentBalance)
                     
                     Text("sats")
                         .font(OlasDesign.Typography.body)
@@ -123,14 +142,14 @@ struct MintManagementView: View {
             HStack(spacing: OlasDesign.Spacing.xl) {
                 MintStatCard(
                     icon: "building.2.fill",
-                    value: "\(walletManager.mintURLs.count)",
+                    value: "\(mintURLs.count)",
                     label: "Active Mints"
                 )
                 
                 MintStatCard(
                     icon: "bitcoinsign.circle.fill",
-                    value: "\(walletManager.activeTokens.count)",
-                    label: "Total Tokens"
+                    value: "\(formatSats(mintBalances.values.reduce(0, +)))",
+                    label: "Total Balance"
                 )
                 
                 MintStatCard(
@@ -172,10 +191,10 @@ struct MintManagementView: View {
     
     private var mintCardsSection: some View {
         VStack(spacing: OlasDesign.Spacing.md) {
-            ForEach(Array(walletManager.mintURLs.enumerated()), id: \.element) { index, mintURL in
+            ForEach(Array(mintURLs.enumerated()), id: \.element) { index, mintURL in
                 MintCard(
                     mintURL: mintURL,
-                    balance: walletManager.mintBalances[mintURL] ?? 0,
+                    balance: mintBalances[mintURL] ?? 0,
                     stats: mintStats[mintURL],
                     onTap: {
                         selectedMint = mintURL
@@ -293,10 +312,10 @@ struct MintManagementView: View {
     
     private func loadMintStats() {
         // Mock data - in production, fetch real stats
-        for mint in walletManager.mintURLs {
+        for mint in mintURLs {
             mintStats[mint] = MintStats(
-                balance: walletManager.mintBalances[mint] ?? 0,
-                tokenCount: walletManager.activeTokens.filter { $0.mint == mint }.count,
+                balance: mintBalances[mint] ?? 0,
+                tokenCount: 0, // Mock data, adjust with real values if available
                 status: .active,
                 lastActive: Date(),
                 fee: 0.5
@@ -305,7 +324,7 @@ struct MintManagementView: View {
     }
     
     private func calculateTransactionCount() -> Int {
-        walletManager.recentTransactions.count
+        transactionCount
     }
     
     private func removeMint(_ mintURL: String) async {

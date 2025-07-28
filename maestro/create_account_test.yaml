@@ -1,0 +1,66 @@
+appId: com.olas.app
+---
+- launchApp
+
+# Wait for the app to load
+- waitForAnimationToEnd
+
+# Verify we're on the authentication screen
+- assertVisible: "Olas"
+- assertVisible: "Welcome back"
+
+# Tap "I'm New Here" button
+- tapOn: "I'm New Here"
+
+# Wait for onboarding screen
+- waitForAnimationToEnd
+
+# Page 1: Welcome Page
+- assertVisible: "Picture-First Social"
+- swipe:
+    direction: LEFT
+
+# Page 2: Nostr Explainer
+- assertVisible: "Your Content, Everywhere"
+- swipe:
+    direction: LEFT
+
+# Page 3: Key Generation
+- assertVisible: "Creating Your Identity"
+# Wait for automatic key generation (happens after 2 seconds)
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "Your Identity is Ready"
+- swipe:
+    direction: LEFT
+
+# Page 4: Security Education
+- assertVisible: "Your Keys, Your Control"
+- assertVisible: "Get Started"
+- tapOn: "Get Started"
+
+# Wait for account creation and main feed
+- waitForAnimationToEnd:
+    timeout: 10000
+
+# Verify we're now on the main feed
+- assertVisible:
+    text: "Olas"
+    index: 0
+
+# Verify bottom tab bar is visible (indicates successful login)
+- assertVisible:
+    id: "mainTabBar"
+
+# Verify feed tab is selected
+- assertVisible:
+    id: "feedTab"
+    
+# Optional: Verify profile was created by navigating to profile
+- tapOn:
+    id: "profileTab"
+
+- waitForAnimationToEnd
+
+# Should see the default display name from onboarding
+- assertVisible: "Olas User"

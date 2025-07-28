@@ -8,10 +8,9 @@ struct OlasEnhancedBalanceCard: View {
     @State private var selectedMint: String?
     @State private var rotationAngle: Double = 0
     @State private var pulseAnimation = false
-    
-    private var totalBalance: Int64 {
-        walletManager.currentBalance
-    }
+    @State private var totalBalance: Int64 = 0
+    @State private var mintBalances: [String: Int64] = [:]
+    @State private var isPressed = false
     
     private var formattedBalance: String {
         let formatter = NumberFormatter()
@@ -22,7 +21,7 @@ struct OlasEnhancedBalanceCard: View {
     
     private var mintData: [(mint: String, balance: Int64, percentage: Double)] {
         let total = Double(totalBalance)
-        return walletManager.mintBalances.map { mint, balance in
+        return mintBalances.map { mint, balance in
             let percentage = total > 0 ? (Double(balance) / total) * 100 : 0
             return (mint: mint, balance: balance, percentage: percentage)
         }.sorted { $0.balance > $1.balance }
@@ -39,16 +38,56 @@ struct OlasEnhancedBalanceCard: View {
         ]
     }
     
+    private var cardBackground: LinearGradient {
+        LinearGradient(
+            colors: [
+                OlasDesign.Colors.surface,
+                OlasDesign.Colors.surface.opacity(0.8)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    
     var body: some View {
         VStack(spacing: 0) {
-            // Main balance card
-            Button {
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    isExpanded.toggle()
-                    showingBreakdown.toggle()
-                }
-                OlasDesign.Haptic.selection()
-            } label: {
+            mainBalanceCard
+            
+            if showingBreakdown {
+                balanceBreakdownView
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: OlasDesign.CornerRadius.lg)
+                .fill(cardBackground)
+                .shadow(color: .black.opacity(0.1), radius: 20, x: 0, y: 10)
+        )
+        .scaleEffect(isPressed ? 0.98 : 1.0)
+        .rotation3DEffect(
+            .degrees(rotationAngle),
+            axis: (x: 0, y: 1, z: 0)
+        )
+        .onAppear {
+            rotationAngle = 360
+        }
+        .task {
+            await loadBalances()
+        }
+        .onChange(of: walletManager.wallet != nil) {
+            Task {
+                await loadBalances()
+            }
+        }
+    }
+    
+    private var mainBalanceCard: some View {
+        Button {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                isExpanded.toggle()
+                showingBreakdown.toggle()
+            }
+            OlasDesign.Haptic.selection()
+        } label: {
                 VStack(spacing: OlasDesign.Spacing.md) {
                     // Header
                     HStack {
@@ -169,9 +208,9 @@ struct OlasEnhancedBalanceCard: View {
                 )
             }
             .buttonStyle(PlainButtonStyle())
-            
-            // Expanded breakdown
-            if showingBreakdown {
+    }
+    
+    private var balanceBreakdownView: some View {
                 VStack(spacing: OlasDesign.Spacing.sm) {
                     ForEach(Array(mintData.enumerated()), id: \.element.mint) { index, data in
                         MintBreakdownRow(
@@ -206,11 +245,11 @@ struct OlasEnhancedBalanceCard: View {
                     insertion: .push(from: .top).combined(with: .opacity),
                     removal: .push(from: .top).combined(with: .opacity)
                 ))
-            }
-        }
-        .onAppear {
-            rotationAngle = 360
-        }
+    }
+    
+    private func loadBalances() async {
+        totalBalance = await walletManager.currentBalance
+        mintBalances = await walletManager.getAllMintBalances()
     }
     
     private func startAngle(for index: Int) -> CGFloat {

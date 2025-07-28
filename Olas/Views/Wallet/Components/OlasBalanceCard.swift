@@ -5,6 +5,8 @@ struct OlasBalanceCard: View {
     @State private var isExpanded = false
     @State private var pulseAnimation = false
     @State private var balanceAnimation = false
+    @State private var currentBalance: Int64 = 0
+    @State private var mintBalances: [String: Int64] = [:]
     
     private let mintColors: [Color] = [
         Color(red: 0.98, green: 0.54, blue: 0.13), // Orange
@@ -16,10 +18,10 @@ struct OlasBalanceCard: View {
     ]
     
     private var mintDistribution: [(mint: String, balance: Int64, percentage: Double)] {
-        let total = Double(walletManager.currentBalance)
+        let total = Double(currentBalance)
         guard total > 0 else { return [] }
         
-        return walletManager.mintBalances.compactMap { (mintURL, balance) in
+        return mintBalances.compactMap { (mintURL, balance) in
             guard balance > 0 else { return nil }
             let percentage = (Double(balance) / total) * 100
             let mintName = mintURL.replacingOccurrences(of: "https://", with: "")
@@ -71,11 +73,11 @@ struct OlasBalanceCard: View {
                 // Balance amount
                 VStack(spacing: OlasDesign.Spacing.xs) {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text(formatBalance(walletManager.currentBalance))
+                        Text(formatBalance(currentBalance))
                             .font(.system(size: isExpanded ? 42 : 48, weight: .bold, design: .rounded))
                             .foregroundColor(OlasDesign.Colors.text)
                             .contentTransition(.numericText())
-                            .animation(.spring(response: 0.4), value: walletManager.currentBalance)
+                            .animation(.spring(response: 0.4), value: currentBalance)
                         
                         Text("sats")
                             .font(.system(size: isExpanded ? 18 : 20, weight: .medium, design: .rounded))
@@ -85,7 +87,7 @@ struct OlasBalanceCard: View {
                     // USD equivalent - TODO: Add BTC price fetch
                     /*
                     if let usdPrice = walletManager.btcPrice {
-                        let usdValue = Double(walletManager.currentBalance) * usdPrice / 100_000_000
+                        let usdValue = Double(currentBalance) * usdPrice / 100_000_000
                         Text("≈ $\(String(format: "%.2f", usdValue)) USD")
                             .font(.system(size: 16, weight: .medium, design: .rounded))
                             .foregroundColor(OlasDesign.Colors.textTertiary)
@@ -208,6 +210,11 @@ struct OlasBalanceCard: View {
                 balanceAnimation = true
             }
         }
+        .task {
+            // Load wallet data
+            currentBalance = await walletManager.currentBalance
+            mintBalances = await walletManager.getAllMintBalances()
+        }
     }
     
     private func formatBalance(_ balance: Int64) -> String {
@@ -218,7 +225,7 @@ struct OlasBalanceCard: View {
     }
     
     private func startAngle(for index: Int) -> Angle {
-        let total = Double(walletManager.currentBalance)
+        let total = Double(currentBalance)
         guard total > 0 else { return .zero }
         
         var angle: Double = -90 // Start from top
@@ -229,7 +236,7 @@ struct OlasBalanceCard: View {
     }
     
     private func endAngle(for index: Int) -> Angle {
-        let total = Double(walletManager.currentBalance)
+        let total = Double(currentBalance)
         guard total > 0 else { return .zero }
         
         var angle: Double = -90 // Start from top

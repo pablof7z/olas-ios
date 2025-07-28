@@ -12,35 +12,33 @@ public class UserProfileDataSource: ObservableObject {
     @Published public private(set) var isLoading = false
     @Published public private(set) var error: Error?
     
-    private let dataSource: NDKDataSource<NDKEvent>
+    private let ndk: NDK
+    private let pubkey: String
+    private var observationTask: Task<Void, Never>?
     
     public init(ndk: NDK, pubkey: String) {
-        self.dataSource = ndk.observe(
-            filter: NDKFilter(
-                authors: [pubkey],
-                kinds: [EventKind.metadata]
-            ),
-            maxAge: 0,  // Real-time updates
-            cachePolicy: .cacheWithNetwork
-        )
+        self.ndk = ndk
+        self.pubkey = pubkey
         
-        Task {
-            await observeProfile()
+        observationTask = Task { [weak self] in
+            await self?.observeProfile()
         }
     }
     
     private func observeProfile() async {
-        dataSource.$data
-            .compactMap { events in
-                events.sorted { $0.createdAt > $1.createdAt }.first
-            }
-            .map { event in
-                JSONCoding.safeDecode(NDKUserProfile.self, from: event.content.data(using: .utf8) ?? Data())
-            }
-            .assign(to: &$profile)
+        isLoading = true
         
-        dataSource.$isLoading.assign(to: &$isLoading)
-        dataSource.$error.assign(to: &$error)
+        // Use NDK's profile manager instead of custom data source
+        for await profile in await ndk.profileManager.observe(for: pubkey, maxAge: 0) {
+            await MainActor.run { [weak self] in
+                self?.profile = profile
+                self?.isLoading = false
+            }
+        }
+    }
+    
+    deinit {
+        observationTask?.cancel()
     }
 }
 
@@ -53,43 +51,56 @@ public class ImageFeedDataSource: ObservableObject {
     @Published public private(set) var isLoading = false
     @Published public private(set) var error: Error?
     
-    private let dataSource: NDKDataSource<NDKEvent>
+    private let ndk: NDK
+    private let filter: NDKFilter
+    private var observationTask: Task<Void, Never>?
     
     public init(ndk: NDK, authors: [String]? = nil, limit: Int = 50) {
+        self.ndk = ndk
         var filter = NDKFilter(kinds: [EventKind.textNote])
         filter.authors = authors
         filter.limit = limit
+        self.filter = filter
         
-        self.dataSource = ndk.observe(
-            filter: filter,
-            maxAge: 0,  // Real-time updates
-            cachePolicy: .cacheWithNetwork
-        )
-        
-        Task {
-            await observePosts()
+        observationTask = Task { [weak self] in
+            await self?.observePosts()
         }
     }
     
     private func observePosts() async {
-        dataSource.$data
-            .map { events in
-                // Filter for events with image tags
-                events.filter { event in
-                    event.tags.contains { tag in
-                        tag.count >= 2 && (tag[0] == "imeta" || 
-                                         (tag[0] == "r" && tag[1].hasSuffix(".jpg")) ||
-                                         (tag[0] == "r" && tag[1].hasSuffix(".jpeg")) ||
-                                         (tag[0] == "r" && tag[1].hasSuffix(".png")) ||
-                                         (tag[0] == "r" && tag[1].hasSuffix(".gif")) ||
-                                         (tag[0] == "r" && tag[1].hasSuffix(".webp")))
-                    }
-                }.sorted { $0.createdAt > $1.createdAt }
-            }
-            .assign(to: &$posts)
+        isLoading = true
         
-        dataSource.$isLoading.assign(to: &$isLoading)
-        dataSource.$error.assign(to: &$error)
+        let dataSource = ndk.observe(
+            filter: filter,
+            maxAge: 0,
+            cachePolicy: .cacheWithNetwork
+        )
+        
+        var collectedPosts: [NDKEvent] = []
+        
+        for await event in dataSource.events {
+            // Filter for events with image tags
+            if event.tags.contains(where: { tag in
+                tag.count >= 2 && (tag[0] == "imeta" || 
+                                 (tag[0] == "r" && isImageURL(tag[1])))
+            }) {
+                collectedPosts.append(event)
+                
+                await MainActor.run { [weak self] in
+                    self?.posts = collectedPosts.sorted { $0.createdAt > $1.createdAt }
+                    self?.isLoading = false
+                }
+            }
+        }
+    }
+    
+    private func isImageURL(_ url: String) -> Bool {
+        let imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp"]
+        return imageExtensions.contains { url.lowercased().hasSuffix($0) }
+    }
+    
+    deinit {
+        observationTask?.cancel()
     }
 }
 
@@ -102,38 +113,48 @@ public class HashtagFeedDataSource: ObservableObject {
     @Published public private(set) var isLoading = false
     @Published public private(set) var error: Error?
     
-    private let dataSource: NDKDataSource<NDKEvent>
-    private let hashtag: String
+    private let ndk: NDK
+    private let filter: NDKFilter
+    private var observationTask: Task<Void, Never>?
     
     public init(ndk: NDK, hashtag: String, limit: Int = 50) {
-        self.hashtag = hashtag.lowercased().replacingOccurrences(of: "#", with: "")
+        self.ndk = ndk
+        let cleanHashtag = hashtag.lowercased().replacingOccurrences(of: "#", with: "")
         
-        let filter = NDKFilter(
+        self.filter = NDKFilter(
             kinds: [EventKind.textNote],
             limit: limit,
-            tags: ["t": Set([self.hashtag])]
+            tags: ["t": Set([cleanHashtag])]
         )
         
-        self.dataSource = ndk.observe(
-            filter: filter,
-            maxAge: 0,  // Real-time updates
-            cachePolicy: .cacheWithNetwork
-        )
-        
-        Task {
-            await observePosts()
+        observationTask = Task { [weak self] in
+            await self?.observePosts()
         }
     }
     
     private func observePosts() async {
-        dataSource.$data
-            .map { events in
-                events.sorted { $0.createdAt > $1.createdAt }
-            }
-            .assign(to: &$posts)
+        isLoading = true
         
-        dataSource.$isLoading.assign(to: &$isLoading)
-        dataSource.$error.assign(to: &$error)
+        let dataSource = ndk.observe(
+            filter: filter,
+            maxAge: 0,
+            cachePolicy: .cacheWithNetwork
+        )
+        
+        var collectedPosts: [NDKEvent] = []
+        
+        for await event in dataSource.events {
+            collectedPosts.append(event)
+            
+            await MainActor.run { [weak self] in
+                self?.posts = collectedPosts.sorted { $0.createdAt > $1.createdAt }
+                self?.isLoading = false
+            }
+        }
+    }
+    
+    deinit {
+        observationTask?.cancel()
     }
 }
 
@@ -146,59 +167,63 @@ public class UserPostsDataSource: ObservableObject {
     @Published public private(set) var isLoading = false
     @Published public private(set) var error: Error?
     
-    private let dataSource: NDKDataSource<NDKEvent>
+    private let ndk: NDK
+    private let filter: NDKFilter
+    private let includeReplies: Bool
+    private var observationTask: Task<Void, Never>?
     
     public init(ndk: NDK, pubkey: String, includeReplies: Bool = false) {
-        var filter = NDKFilter(
+        self.ndk = ndk
+        self.includeReplies = includeReplies
+        self.filter = NDKFilter(
             authors: [pubkey],
             kinds: [EventKind.textNote]
         )
         
-        if !includeReplies {
-            // This would filter out replies if NDK supported it
-            // For now, we'll filter client-side
-        }
-        
-        self.dataSource = ndk.observe(
-            filter: filter,
-            maxAge: 0,  // Real-time updates
-            cachePolicy: .cacheWithNetwork
-        )
-        
-        Task {
-            await observePosts(includeReplies: includeReplies)
+        observationTask = Task { [weak self] in
+            await self?.observePosts()
         }
     }
     
-    private func observePosts(includeReplies: Bool) async {
-        dataSource.$data
-            .map { events in
-                var filtered = events
-                
-                if !includeReplies {
-                    // Filter out replies (events with "e" or "p" tags that indicate replies)
-                    filtered = events.filter { event in
-                        !event.isReply
-                    }
-                }
-                
-                // Filter for events with images
-                return filtered.filter { event in
-                    event.tags.contains { tag in
-                        tag.count >= 2 && (tag[0] == "imeta" || 
-                                         (tag[0] == "r" && self.isImageURL(tag[1])))
-                    }
-                }.sorted { $0.createdAt > $1.createdAt }
-            }
-            .assign(to: &$posts)
+    private func observePosts() async {
+        isLoading = true
         
-        dataSource.$isLoading.assign(to: &$isLoading)
-        dataSource.$error.assign(to: &$error)
+        let dataSource = ndk.observe(
+            filter: filter,
+            maxAge: 0,
+            cachePolicy: .cacheWithNetwork
+        )
+        
+        var collectedPosts: [NDKEvent] = []
+        
+        for await event in dataSource.events {
+            // Filter based on reply status
+            if !includeReplies && event.isReply {
+                continue
+            }
+            
+            // Filter for events with images
+            if event.tags.contains(where: { tag in
+                tag.count >= 2 && (tag[0] == "imeta" || 
+                                 (tag[0] == "r" && isImageURL(tag[1])))
+            }) {
+                collectedPosts.append(event)
+                
+                await MainActor.run { [weak self] in
+                    self?.posts = collectedPosts.sorted { $0.createdAt > $1.createdAt }
+                    self?.isLoading = false
+                }
+            }
+        }
     }
     
     private func isImageURL(_ url: String) -> Bool {
         let imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp"]
         return imageExtensions.contains { url.lowercased().hasSuffix($0) }
+    }
+    
+    deinit {
+        observationTask?.cancel()
     }
 }
 

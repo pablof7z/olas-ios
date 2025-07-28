@@ -18,7 +18,7 @@ settings:
 packages:
   NDKSwift:
     url: https://github.com/pablof7z/NDKSwift
-    from: 0.2.0
+    branch: master
 targets:
   Olas:
     type: application
@@ -48,3 +48,4 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         SUPPORTS_MACCATALYST: false
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: false
+        SWIFT_VERSION: 5.9

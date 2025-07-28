@@ -18,6 +18,7 @@ struct SendView: View {
     @State private var ecashToken: String?
     @State private var showingShareSheet = false
     @State private var selectedPresetAmount: Int64?
+    @State private var currentBalance: Int64 = 0
     @FocusState private var isAmountFocused: Bool
     @FocusState private var isInvoiceFocused: Bool
     
@@ -99,6 +100,9 @@ struct SendView: View {
                     ShareSheet(items: [token])
                 }
             }
+            .task {
+                currentBalance = await walletManager.currentBalance
+            }
         }
     }
     
@@ -146,7 +150,7 @@ struct SendView: View {
                 .foregroundStyle(OlasDesign.Colors.textSecondary)
             
             HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(formatSats(walletManager.currentBalance))
+                Text(formatSats(currentBalance))
                     .font(.system(size: 28, weight: .bold, design: .rounded))
                     .foregroundStyle(OlasDesign.Colors.text)
                     .contentTransition(.numericText())
@@ -405,7 +409,8 @@ struct SendView: View {
         do {
             switch sendMode {
             case .lightning:
-                try await walletManager.payInvoice(invoice, comment: comment.isEmpty ? nil : comment)
+                // For lightning, we'll pass 0 as amount since it's in the invoice
+                _ = try await walletManager.payLightning(invoice: invoice, amount: 0)
                 OlasDesign.Haptic.success()
                 showingSuccess = true
                 
@@ -416,9 +421,9 @@ struct SendView: View {
                     return
                 }
                 
-                let token = try await walletManager.sendEcash(
+                let token = try await walletManager.send(
                     amount: amountSats,
-                    comment: comment.isEmpty ? nil : comment
+                    memo: comment.isEmpty ? nil : comment
                 )
                 
                 ecashToken = token

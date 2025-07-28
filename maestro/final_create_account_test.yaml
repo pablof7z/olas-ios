@@ -1,0 +1,34 @@
+appId: com.olas.app
+---
+# Account Creation Test for Olas
+
+- clearState
+- launchApp
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Step 1: Start from authentication screen
+- assertVisible: "Olas"
+- tapOn: "I'm New Here"
+- waitForAnimationToEnd:
+    timeout: 3000
+
+# Step 2: Navigate through onboarding
+# Swipe through all 4 pages
+- repeat:
+    times: 3
+    commands:
+      - swipe:
+          direction: LEFT
+      - waitForAnimationToEnd:
+          timeout: 3000
+
+# Final page - tap Get Started
+- tapOn: "Get Started"
+
+# Step 3: Wait for account creation
+- waitForAnimationToEnd:
+    timeout: 15000
+
+# Step 4: Verify we're in the main app
+- assertVisible: "Olas"

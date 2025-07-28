@@ -1,4 +1,5 @@
 import SwiftUI
+// import Blurhash // Temporarily disabled
 #if os(iOS)
 import UIKit
 #endif
@@ -59,68 +60,54 @@ struct BlurhashView: View {
     
     private func decodeHash() {
         DispatchQueue.global(qos: .userInitiated).async {
-            // Decode blurhash (placeholder implementation)
-            // In production, use a proper blurhash library
-            let placeholderImage = createPlaceholderImage(from: hash)
+            // Decode blurhash using the Blurhash library
+            // Temporarily disabled blurhash decoding
+            #if os(iOS)
+            let decodedImage: UIImage? = nil // UIImage(blurHash: hash, size: CGSize(width: 32, height: 32))
+            #else
+            let decodedImage: NSImage? = nil // NSImage(blurHash: hash, size: CGSize(width: 32, height: 32))
+            #endif
             
             DispatchQueue.main.async {
                 withAnimation(.easeOut(duration: 0.3)) {
-                    self.image = placeholderImage
+                    self.image = decodedImage ?? self.createFallbackImage()
                 }
             }
         }
     }
     
     #if os(iOS)
-    private func createPlaceholderImage(from hash: String) -> UIImage? {
-        // Create a gradient placeholder based on hash
+    private func createFallbackImage() -> UIImage? {
         let size = CGSize(width: 32, height: 32)
         let renderer = UIGraphicsImageRenderer(size: size)
         
         return renderer.image { context in
-            // Extract colors from hash (simplified)
-            let hashValue = hash.hashValue
-            let hue1 = CGFloat(abs(hashValue % 360)) / 360.0
-            let hue2 = CGFloat(abs((hashValue >> 8) % 360)) / 360.0
-            
-            let color1 = UIColor(hue: hue1, saturation: 0.5, brightness: 0.8, alpha: 1.0)
-            let color2 = UIColor(hue: hue2, saturation: 0.5, brightness: 0.6, alpha: 1.0)
-            
-            let gradient = CGGradient(
-                colorsSpace: CGColorSpaceCreateDeviceRGB(),
-                colors: [color1.cgColor, color2.cgColor] as CFArray,
-                locations: [0, 1]
-            )!
-            
-            context.cgContext.drawLinearGradient(
-                gradient,
-                start: CGPoint(x: 0, y: 0),
-                end: CGPoint(x: size.width, y: size.height),
-                options: []
-            )
+            let gradient = CAGradientLayer()
+            gradient.frame = CGRect(origin: .zero, size: size)
+            gradient.colors = [
+                UIColor.systemGray5.cgColor,
+                UIColor.systemGray6.cgColor
+            ]
+            gradient.render(in: context.cgContext)
         }
     }
     #else
-    private func createPlaceholderImage(from hash: String) -> NSImage? {
-        // macOS implementation
+    private func createFallbackImage() -> NSImage? {
         let size = CGSize(width: 32, height: 32)
         let image = NSImage(size: size)
         image.lockFocus()
         
-        let hashValue = hash.hashValue
-        let hue1 = CGFloat(abs(hashValue % 360)) / 360.0
-        let hue2 = CGFloat(abs((hashValue >> 8) % 360)) / 360.0
-        
-        let color1 = NSColor(hue: hue1, saturation: 0.5, brightness: 0.8, alpha: 1.0)
-        let color2 = NSColor(hue: hue2, saturation: 0.5, brightness: 0.6, alpha: 1.0)
-        
-        let gradient = NSGradient(colors: [color1, color2])
+        let gradient = NSGradient(colors: [
+            NSColor(calibratedWhite: 0.9, alpha: 1.0),
+            NSColor(calibratedWhite: 0.85, alpha: 1.0)
+        ])
         gradient?.draw(in: NSRect(origin: .zero, size: size), angle: 45)
         
         image.unlockFocus()
         return image
     }
     #endif
+    
 }
 
 // MARK: - Progressive Image View

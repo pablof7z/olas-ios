@@ -3,6 +3,7 @@ import SwiftUI
 struct OnboardingView: View {
     @Environment(NostrManager.self) private var nostrManager
     @EnvironmentObject var appState: AppState
+    @Environment(\.dismiss) var dismiss
     @State private var currentPage = 0
     @State private var animateContent = false
     
@@ -24,10 +25,11 @@ struct OnboardingView: View {
                 
                 SecurityEducationView()
                     .tag(3)
+                    .environmentObject(appState)
+                    .environment(nostrManager)
             }
             #if os(iOS)
-            .tabViewStyle(.page)
-            .indexViewStyle(.page(backgroundDisplayMode: .always))
+            .tabViewStyle(.page(indexDisplayMode: .never))
             #endif
             
             // Skip button
@@ -304,6 +306,7 @@ struct SurroundingNode: View {
 struct KeyGenerationView: View {
     @Environment(NostrManager.self) private var nostrManager
     @EnvironmentObject var appState: AppState
+    @Environment(\.dismiss) var dismiss
     @State private var animate = false
     @State private var particles: [Particle] = []
     @State private var keyGenerated = false
@@ -392,19 +395,10 @@ struct KeyGenerationView: View {
             Spacer()
             
             if keyGenerated {
-                VStack(spacing: OlasDesign.Spacing.md) {
-                    Button {
-                        showMnemonic = true
-                        #if os(iOS)
-                        OlasDesign.Haptic.impact(.medium)
-                        #else
-                        OlasDesign.Haptic.impact(0)
-                        #endif
-                    } label: {
-                        HStack {
-                            Image(systemName: "lock.shield.fill")
-                            Text("Secure My Account")
-                        }
+                Button {
+                    completeOnboarding()
+                } label: {
+                    Text("Continue")
                         .font(OlasDesign.Typography.bodyBold)
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
@@ -417,15 +411,6 @@ struct KeyGenerationView: View {
                             )
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 16))
-                    }
-                    
-                    Button {
-                        completeOnboarding()
-                    } label: {
-                        Text("I'll do this later")
-                            .font(OlasDesign.Typography.caption)
-                            .foregroundStyle(.white.opacity(0.6))
-                    }
                 }
                 .padding(.horizontal, OlasDesign.Spacing.xl)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -440,11 +425,6 @@ struct KeyGenerationView: View {
                 }
             }
             .padding(.bottom, 50)
-        }
-        .sheet(isPresented: $showMnemonic) {
-            MnemonicBackupView(privateKey: privateKey) {
-                completeOnboarding()
-            }
         }
     }
     
@@ -465,23 +445,23 @@ struct KeyGenerationView: View {
         // Animate particles converging
         Timer.scheduledTimer(withTimeInterval: 0.016, repeats: true) { timer in
             withAnimation(.linear(duration: 0.016)) {
-                for i in particles.indices {
+                for i in self.particles.indices {
                     // Move towards center
                     let center = CGPoint(x: 150, y: 150)
-                    let dx = (center.x - particles[i].position.x) * 0.02
-                    let dy = (center.y - particles[i].position.y) * 0.02
+                    let dx = (center.x - self.particles[i].position.x) * 0.02
+                    let dy = (center.y - self.particles[i].position.y) * 0.02
                     
-                    particles[i].position.x += dx
-                    particles[i].position.y += dy
-                    particles[i].opacity *= 0.98
+                    self.particles[i].position.x += dx
+                    self.particles[i].position.y += dy
+                    self.particles[i].opacity *= 0.98
                     
                     // Remove particles that are too faded
-                    if particles[i].opacity < 0.1 {
-                        particles[i].position = CGPoint(
+                    if self.particles[i].opacity < 0.1 {
+                        self.particles[i].position = CGPoint(
                             x: CGFloat.random(in: 50...250),
                             y: CGFloat.random(in: 50...250)
                         )
-                        particles[i].opacity = 1.0
+                        self.particles[i].opacity = 1.0
                     }
                 }
             }
@@ -517,6 +497,10 @@ struct KeyGenerationView: View {
                     displayName: "Olas User",
                     about: "Visual storyteller on Nostr 📸"
                 )
+                UserDefaults.standard.set(true, forKey: "hasSeenOnboarding")
+                await MainActor.run {
+                    dismiss()
+                }
             } catch {
                 print("Failed to create account: \(error)")
             }
@@ -526,6 +510,9 @@ struct KeyGenerationView: View {
 
 // MARK: - Security Education
 struct SecurityEducationView: View {
+    @Environment(NostrManager.self) private var nostrManager
+    @EnvironmentObject var appState: AppState
+    @Environment(\.dismiss) var dismiss
     @State private var animate = false
     @State private var lockAnimation = false
     
@@ -588,6 +575,26 @@ struct SecurityEducationView: View {
             
             Spacer()
             
+            Button {
+                completeOnboarding()
+            } label: {
+                Text("Get Started")
+                    .font(OlasDesign.Typography.bodyBold)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(
+                        LinearGradient(
+                            colors: OlasDesign.Colors.primaryGradient,
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+            }
+            .padding(.horizontal, OlasDesign.Spacing.xl)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            
             // Page indicator
             HStack(spacing: 8) {
                 ForEach(0..<4) { index in
@@ -603,6 +610,23 @@ struct SecurityEducationView: View {
             animate = true
             withAnimation(.easeInOut(duration: 0.8).delay(0.3)) {
                 lockAnimation = true
+            }
+        }
+    }
+    
+    private func completeOnboarding() {
+        Task {
+            do {
+                _ = try await nostrManager.createNewAccount(
+                    displayName: "Olas User",
+                    about: "Visual storyteller on Nostr 📸"
+                )
+                UserDefaults.standard.set(true, forKey: "hasSeenOnboarding")
+                await MainActor.run {
+                    dismiss()
+                }
+            } catch {
+                print("Failed to create account: \(error)")
             }
         }
     }
@@ -641,158 +665,6 @@ struct SecurityPoint: View {
     }
 }
 
-// MARK: - Mnemonic Backup View
-struct MnemonicBackupView: View {
-    let privateKey: String
-    let onComplete: () -> Void
-    @State private var words: [String] = []
-    @State private var copiedWords = Set<Int>()
-    @State private var allCopied = false
-    
-    var body: some View {
-        ZStack {
-            TimeBasedGradient()
-                .ignoresSafeArea()
-            
-            VStack(spacing: OlasDesign.Spacing.xl) {
-                // Header
-                VStack(spacing: OlasDesign.Spacing.md) {
-                    Image(systemName: "doc.on.doc.fill")
-                        .font(.system(size: 48))
-                        .foregroundStyle(.white)
-                    
-                    Text("Save Your Recovery Words")
-                        .font(.system(size: 24, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white)
-                    
-                    Text("Write these down in order and keep them safe")
-                        .font(OlasDesign.Typography.body)
-                        .foregroundStyle(.white.opacity(0.8))
-                }
-                .padding(.top, OlasDesign.Spacing.xxxl)
-                
-                // Mnemonic words grid
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: OlasDesign.Spacing.md) {
-                    ForEach(Array(words.enumerated()), id: \.offset) { index, word in
-                        MnemonicWordView(
-                            word: word,
-                            number: index + 1,
-                            isCopied: copiedWords.contains(index)
-                        ) {
-                            copiedWords.insert(index)
-                            #if os(iOS)
-                            OlasDesign.Haptic.impact(.light)
-                            #else
-                            OlasDesign.Haptic.impact(0)
-                            #endif
-                            
-                            if copiedWords.count == words.count {
-                                withAnimation(.spring()) {
-                                    allCopied = true
-                                }
-                                OlasDesign.Haptic.success()
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal, OlasDesign.Spacing.xl)
-                
-                Spacer()
-                
-                // Action buttons
-                VStack(spacing: OlasDesign.Spacing.md) {
-                    Button {
-                        #if os(iOS)
-                        OlasDesign.Haptic.impact(.medium)
-                        #else
-                        OlasDesign.Haptic.impact(0)
-                        #endif
-                        onComplete()
-                    } label: {
-                        Text(allCopied ? "I've Saved My Words" : "Copy All Words First")
-                        .font(OlasDesign.Typography.bodyBold)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 56)
-                        .background(
-                            LinearGradient(
-                                colors: allCopied ? OlasDesign.Colors.primaryGradient : [.gray],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                    }
-                    .disabled(!allCopied)
-                    
-                    Text("⚠️ Never share these words with anyone")
-                        .font(OlasDesign.Typography.caption)
-                        .foregroundStyle(.yellow)
-                }
-                .padding(.horizontal, OlasDesign.Spacing.xl)
-                .padding(.bottom, OlasDesign.Spacing.xxxl)
-            }
-        }
-        .onAppear {
-            generateMnemonic()
-        }
-    }
-    
-    private func generateMnemonic() {
-        // In a real app, this would convert the private key to a proper BIP39 mnemonic
-        // For now, we'll generate sample words
-        words = [
-            "laptop", "ancient", "energy", "turtle",
-            "space", "panda", "sunset", "wisdom",
-            "ocean", "ladder", "crystal", "voyage"
-        ]
-    }
-}
-
-struct MnemonicWordView: View {
-    let word: String
-    let number: Int
-    let isCopied: Bool
-    let onTap: () -> Void
-    @State private var animate = false
-    
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: OlasDesign.Spacing.sm) {
-                Text("\(number).")
-                    .font(OlasDesign.Typography.caption)
-                    .foregroundStyle(.white.opacity(0.6))
-                
-                Text(word)
-                    .font(OlasDesign.Typography.bodyBold)
-                    .foregroundStyle(.white)
-                
-                Spacer()
-                
-                Image(systemName: isCopied ? "checkmark.circle.fill" : "doc.on.doc")
-                    .foregroundStyle(isCopied ? .green : .white.opacity(0.6))
-                    .animation(.spring(), value: isCopied)
-            }
-            .padding(.horizontal, OlasDesign.Spacing.md)
-            .padding(.vertical, OlasDesign.Spacing.sm)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(.white.opacity(isCopied ? 0.2 : 0.1))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(.white.opacity(0.2), lineWidth: 1)
-                    )
-            )
-        }
-        .scaleEffect(animate ? 1 : 0.8)
-        .opacity(animate ? 1 : 0)
-        .onAppear {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.8).delay(Double(number) * 0.05)) {
-                animate = true
-            }
-        }
-    }
-}
 
 
 

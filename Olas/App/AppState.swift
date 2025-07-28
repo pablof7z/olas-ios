@@ -16,30 +16,42 @@ class AppState: ObservableObject {
     
     // Lazy reference to NostrManager
     private weak var nostrManager: NostrManager?
+    private var authObservationTask: Task<Void, Never>?
     
     func setNostrManager(_ manager: NostrManager) {
         self.nostrManager = manager
         
+        // Cancel any existing observation
+        authObservationTask?.cancel()
+        
         // Observe authentication state
-        Task {
-            await observeAuthState()
+        authObservationTask = Task { [weak self] in
+            await self?.observeAuthState()
         }
     }
     
     private func observeAuthState() async {
         guard let nostrManager = nostrManager else { return }
         
-        // Update auth state based on NostrManager
-        withObservationTracking {
-            _ = nostrManager.isAuthenticated
-        } onChange: { [weak self] in
-            Task { @MainActor in
-                await self?.updateAuthState()
-            }
-        }
-        
         // Initial update
         await updateAuthState()
+        
+        // Observe auth state changes using withObservationTracking properly
+        while !Task.isCancelled {
+            _ = withObservationTracking {
+                _ = nostrManager.isAuthenticated
+            } onChange: {
+                Task { [weak self] in
+                    await self?.updateAuthState()
+                }
+            }
+            
+            // Only continue if task is not cancelled
+            guard !Task.isCancelled else { break }
+            
+            // Small delay to prevent busy waiting
+            try? await Task.sleep(nanoseconds: 100_000_000) // 0.1 seconds
+        }
     }
     
     private func updateAuthState() async {
@@ -47,6 +59,10 @@ class AppState: ObservableObject {
         
         isAuthenticated = nostrManager.isAuthenticated
         currentUser = await nostrManager.currentUser
+    }
+    
+    deinit {
+        authObservationTask?.cancel()
     }
     
     func reset() {

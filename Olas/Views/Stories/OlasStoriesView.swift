@@ -437,15 +437,15 @@ struct StoryView: View {
         timer?.invalidate()
         progress = 0
         
-        timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
-            if !isPaused {
+        timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { timer in
+            if !self.isPaused {
                 withAnimation(.linear(duration: 0.05)) {
-                    progress += 0.05 / storyDuration
+                    self.progress += 0.05 / self.storyDuration
                 }
                 
-                if progress >= 1 {
-                    timer?.invalidate()
-                    onNext()
+                if self.progress >= 1 {
+                    timer.invalidate()
+                    self.onNext()
                 }
             }
         }

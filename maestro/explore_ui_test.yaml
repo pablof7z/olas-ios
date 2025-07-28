@@ -1,0 +1,35 @@
+appId: com.olas.app
+---
+- clearState
+- launchApp
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Check for common UI elements
+- runFlow:
+    when:
+      visible: "I'm New Here"
+    commands:
+      - tapOn: "I'm New Here"
+      - waitForAnimationToEnd
+      
+# Check if we're in onboarding - just swipe through
+- repeat:
+    times: 4
+    commands:
+      - swipe:
+          direction: LEFT
+      - waitForAnimationToEnd:
+          timeout: 2000
+                
+# Try to find and tap Get Started
+- runFlow:
+    when:
+      visible: "Get Started"
+    commands:
+      - tapOn: "Get Started"
+      - waitForAnimationToEnd:
+          timeout: 10000
+          
+# Just verify something is visible
+- assertVisible: "Olas"

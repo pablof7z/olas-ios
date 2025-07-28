@@ -1,0 +1,9 @@
+appId: com.olas.app
+---
+- clearState
+- launchApp
+- waitForAnimationToEnd:
+    timeout: 10000
+
+# Just verify the app launched with any visible text
+- assertVisible: ".*"

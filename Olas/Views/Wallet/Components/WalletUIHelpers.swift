@@ -1,4 +1,5 @@
 import SwiftUI
+import NDKSwift
 
 // MARK: - Pulsing Icon
 struct PulsingIcon: View {
@@ -51,6 +52,7 @@ struct PulsingIcon: View {
 // MARK: - Mint Distribution Preview
 struct MintDistributionPreview: View {
     @ObservedObject var walletManager: OlasWalletManager
+    @State private var mintURLs: [String] = []
     
     private let mintColors: [Color] = [
         Color(hex: "FF6B6B"),
@@ -62,7 +64,7 @@ struct MintDistributionPreview: View {
     
     var body: some View {
         HStack(spacing: OlasDesign.Spacing.sm) {
-            ForEach(Array(walletManager.mintURLs.prefix(4).enumerated()), id: \.offset) { index, mintURL in
+            ForEach(Array(mintURLs.prefix(4).enumerated()), id: \.offset) { index, mintURL in
                 Circle()
                     .fill(mintColors[index % mintColors.count])
                     .frame(width: 10, height: 10)
@@ -72,8 +74,8 @@ struct MintDistributionPreview: View {
                     )
             }
             
-            if walletManager.mintURLs.count > 4 {
-                Text("+\(walletManager.mintURLs.count - 4)")
+            if mintURLs.count > 4 {
+                Text("+\(mintURLs.count - 4)")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(OlasDesign.Colors.textTertiary)
             }
@@ -81,7 +83,7 @@ struct MintDistributionPreview: View {
             Spacer()
                 .frame(width: OlasDesign.Spacing.xs)
             
-            Text("\(walletManager.mintURLs.count) mints active")
+            Text("\(mintURLs.count) mints active")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(OlasDesign.Colors.textSecondary)
         }
@@ -95,6 +97,9 @@ struct MintDistributionPreview: View {
                         .stroke(Color.white.opacity(0.1), lineWidth: 1)
                 )
         )
+        .task {
+            mintURLs = await walletManager.getActiveMintURLs()
+        }
     }
 }
 
@@ -144,28 +149,28 @@ struct ShareSheet: View {
 
 // MARK: - Modern Transaction Row
 struct ModernTransactionRow: View {
-    let transaction: OlasWalletManager.WalletTransaction
+    let transaction: WalletTransaction
     @ObservedObject var walletManager: OlasWalletManager
     @State private var showDetail = false
     @State private var animateIn = false
     
     private var transactionIcon: String {
         switch transaction.type {
-        case .sent: return "arrow.up.circle.fill"
-        case .received: return "arrow.down.circle.fill"
-        case .zapped: return "bolt.circle.fill"
-        case .minted: return "plus.circle.fill"
-        case .melted: return "minus.circle.fill"
-        case .swapped: return "arrow.2.circlepath.circle.fill"
+        case .send: return "arrow.up.circle.fill"
+        case .receive: return "arrow.down.circle.fill"
+        case .nutzapSent, .nutzapReceived: return "bolt.circle.fill"
+        case .mint: return "plus.circle.fill"
+        case .melt: return "minus.circle.fill"
+        case .swap: return "arrow.2.circlepath.circle.fill"
         }
     }
     
     private var transactionColor: Color {
         switch transaction.type {
-        case .sent, .melted: return Color(hex: "F56565")
-        case .received, .minted: return Color(hex: "48BB78")
-        case .zapped: return Color(hex: "805AD5")
-        case .swapped: return Color(hex: "4299E1")
+        case .send, .melt: return Color(hex: "F56565")
+        case .receive, .mint: return Color(hex: "48BB78")
+        case .nutzapSent, .nutzapReceived: return Color(hex: "805AD5")
+        case .swap: return Color(hex: "4299E1")
         }
     }
     
@@ -199,7 +204,7 @@ struct ModernTransactionRow: View {
                 
                 // Details
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(transaction.description)
+                    Text(transaction.memo ?? transaction.displayDescription)
                         .font(.system(size: 15, weight: .medium))
                         .foregroundColor(OlasDesign.Colors.text)
                         .lineLimit(1)
@@ -239,7 +244,7 @@ struct ModernTransactionRow: View {
                 
                 // Amount with animation
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text("\(transaction.type == .received || transaction.type == .minted ? "+" : "-")\(formatAmount(transaction.amount))")
+                    Text("\(transaction.type == .receive || transaction.type == .mint ? "+" : "-")\(formatAmount(transaction.amount))")
                         .font(.system(size: 17, weight: .semibold, design: .rounded))
                         .foregroundColor(transactionColor)
                         .opacity(animateIn ? 1 : 0)

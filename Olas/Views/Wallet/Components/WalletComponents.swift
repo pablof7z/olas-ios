@@ -1,4 +1,5 @@
 import SwiftUI
+import NDKSwift
 
 // MARK: - Stat Card
 struct StatCard: View {
@@ -171,6 +172,7 @@ struct TransactionHistoryView: View {
     @ObservedObject var walletManager: OlasWalletManager
     @State private var searchText = ""
     @State private var selectedFilter: TransactionFilter = .all
+    @State private var recentTransactions: [WalletTransaction] = []
     
     enum TransactionFilter: String, CaseIterable {
         case all = "All"
@@ -186,14 +188,14 @@ struct TransactionHistoryView: View {
         }
     }
     
-    var filteredTransactions: [OlasWalletManager.WalletTransaction] {
-        walletManager.recentTransactions.filter { transaction in
+    var filteredTransactions: [WalletTransaction] {
+        recentTransactions.filter { transaction in
             let matchesFilter = selectedFilter == .all || 
-                (selectedFilter == .sent && transaction.type == .sent) ||
-                (selectedFilter == .received && transaction.type == .received)
+                (selectedFilter == .sent && transaction.type == .send) ||
+                (selectedFilter == .received && transaction.type == .receive)
             
             let matchesSearch = searchText.isEmpty || 
-                transaction.description.localizedCaseInsensitiveContains(searchText)
+                (transaction.memo ?? transaction.displayDescription).localizedCaseInsensitiveContains(searchText)
             
             return matchesFilter && matchesSearch
         }
@@ -256,7 +258,7 @@ struct TransactionHistoryView: View {
                         LazyVStack(spacing: 0) {
                             ForEach(filteredTransactions) { transaction in
                                 VStack(spacing: 0) {
-                                    TransactionRow(transaction: transaction, walletManager: walletManager)
+                                    ModernTransactionRow(transaction: transaction, walletManager: walletManager)
                                         .padding(.horizontal, OlasDesign.Spacing.md)
                                     
                                     if transaction.id != filteredTransactions.last?.id {
@@ -277,6 +279,10 @@ struct TransactionHistoryView: View {
         }
         .navigationTitle("Transaction History")
         .navigationBarTitleDisplayMode(.large)
+        .task {
+            // Load transactions
+            recentTransactions = await walletManager.transactions
+        }
     }
 }
 

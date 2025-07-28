@@ -248,38 +248,30 @@ struct FollowUserRow: View {
                         await toggleFollow()
                     }
                 } label: {
-                    Group {
-                        if isLoading {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                                .frame(width: 90, height: 32)
-                        } else {
-                            Text(isFollowing ? "Following" : "Follow")
-                                .font(OlasDesign.Typography.captionBold)
-                                .foregroundStyle(isFollowing ? OlasDesign.Colors.text : .white)
-                                .frame(width: 90, height: 32)
-                                .background(
-                                    Group {
-                                        if isFollowing {
-                                            RoundedRectangle(cornerRadius: OlasDesign.CornerRadius.full)
-                                                .stroke(OlasDesign.Colors.divider, lineWidth: 1)
-                                                .fill(Color.clear)
-                                        } else {
-                                            RoundedRectangle(cornerRadius: OlasDesign.CornerRadius.full)
-                                                .fill(
-                                                    LinearGradient(
-                                                        colors: OlasDesign.Colors.primaryGradient,
-                                                        startPoint: .leading,
-                                                        endPoint: .trailing
-                                                    )
-                                                )
-                                        }
-                                    }
-                                )
-                        }
+                    if isLoading {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                            .frame(width: 90, height: 32)
+                    } else {
+                        Text(isFollowing ? "Following" : "Follow")
+                            .font(OlasDesign.Typography.caption.bold())
+                            .foregroundStyle(isFollowing ? OlasDesign.Colors.text : .white)
+                            .frame(width: 90, height: 32)
+                            .background(
+                                RoundedRectangle(cornerRadius: OlasDesign.CornerRadius.full)
+                                    .stroke(isFollowing ? OlasDesign.Colors.divider : Color.clear, lineWidth: 1)
+                                    .fill(isFollowing ? 
+                                          AnyShapeStyle(Color.clear) :
+                                          AnyShapeStyle(LinearGradient(
+                                              colors: OlasDesign.Colors.primaryGradient,
+                                              startPoint: .leading,
+                                              endPoint: .trailing
+                                          ))
+                                    )
+                            )
                     }
-                    .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isFollowing)
                 }
+                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isFollowing)
                 .disabled(isLoading)
             }
         }
@@ -365,31 +357,31 @@ class FollowersViewModel: ObservableObject {
             limit: 1000
         )
         
-        do {
-            let events = try await ndk.fetchEvents(filter: filter)
+        let dataSource = ndk.observe(
+            filter: filter,
+            maxAge: 0,
+            cachePolicy: .cacheWithNetwork
+        )
+        
+        var followers: [FollowUser] = []
+        var processedPubkeys = Set<String>()
+        
+        for await event in dataSource.events {
+            // Check if this contact list follows our target pubkey
+            let pTags = event.tags.filter { $0.count >= 2 && $0[0] == "p" }
+            let followsTarget = pTags.contains { $0[1] == pubkey }
             
-            var followers: [FollowUser] = []
-            
-            for event in events {
-                // Check if this contact list follows our target pubkey
-                let followsTarget = event.tags.contains { tag in
-                    tag.count >= 2 && tag[0] == "p" && tag[1] == pubkey
-                }
-                
-                if followsTarget {
-                    let follower = FollowUser(pubkey: event.pubkey)
-                    followers.append(follower)
-                }
+            if followsTarget && !processedPubkeys.contains(event.pubkey) {
+                processedPubkeys.insert(event.pubkey)
+                let follower = FollowUser(pubkey: event.pubkey)
+                followers.append(follower)
             }
-            
-            self.users = followers
-            
-            // Load profiles
-            await loadProfiles(ndk: ndk)
-            
-        } catch {
-            print("Failed to load followers: \(error)")
         }
+        
+        self.users = followers
+        
+        // Load profiles
+        await loadProfiles(ndk: ndk)
     }
     
     private func loadFollowing(pubkey: String, ndk: NDK) async {
@@ -400,16 +392,15 @@ class FollowersViewModel: ObservableObject {
             limit: 1
         )
         
-        do {
-            let events = try await ndk.fetchEvents(filter: filter)
-            
-            guard let contactList = events.first else {
-                self.users = []
-                return
-            }
-            
+        let dataSource = ndk.observe(
+            filter: filter,
+            maxAge: 0,
+            cachePolicy: .cacheWithNetwork
+        )
+        
+        for await event in dataSource.events {
             // Extract followed users from p tags
-            let following = contactList.tags.compactMap { tag -> FollowUser? in
+            let following = event.tags.compactMap { tag -> FollowUser? in
                 guard tag.count >= 2, tag[0] == "p" else { return nil }
                 return FollowUser(pubkey: tag[1])
             }
@@ -419,8 +410,8 @@ class FollowersViewModel: ObservableObject {
             // Load profiles
             await loadProfiles(ndk: ndk)
             
-        } catch {
-            print("Failed to load following: \(error)")
+            // Break after first event since we only need one contact list
+            break
         }
     }
     

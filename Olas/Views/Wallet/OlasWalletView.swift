@@ -14,6 +14,11 @@ struct OlasWalletView: View {
     @State private var isRefreshing = false
     @State private var showNutZap = false
     @State private var nutZapRecipient: String?
+    @State private var isWalletConfigured = false
+    @State private var currentBalance: Int64 = 0
+    @State private var mintURLs: [String] = []
+    @State private var mintBalances: [String: Int64] = [:]
+    @State private var recentTransactions: [WalletTransaction] = []
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
@@ -31,7 +36,7 @@ struct OlasWalletView: View {
                 )
                 .ignoresSafeArea()
                 
-                if !walletManager.isWalletConfigured {
+                if !isWalletConfigured {
                     // Empty wallet state
                     emptyWalletView
                 } else {
@@ -134,12 +139,11 @@ struct OlasWalletView: View {
                 NutZapView(walletManager: walletManager, nostrManager: nostrManager, recipientPubkey: nutZapRecipient)
             }
             .task {
-                if walletManager.activeWallet == nil {
-                    do {
-                        try await walletManager.loadWallet()
-                    } catch {
-                        print("Failed to load wallet: \(error)")
-                    }
+                await loadWalletData()
+            }
+            .onReceive(walletManager.$wallet) { _ in
+                Task {
+                    await loadWalletData()
                 }
             }
         }
@@ -209,7 +213,7 @@ struct OlasWalletView: View {
             // Total Mints
             ModernStatCard(
                 icon: "server.rack",
-                value: "\(walletManager.mintURLs.count)",
+                value: "\(mintURLs.count)",
                 label: "Mints",
                 gradient: [Color(hex: "3B82F6"), Color(hex: "1E40AF")]
             )
@@ -217,7 +221,7 @@ struct OlasWalletView: View {
             // Active Balance
             ModernStatCard(
                 icon: "bitcoinsign.circle.fill",
-                value: formatCompactBalance(walletManager.currentBalance),
+                value: formatCompactBalance(currentBalance),
                 label: "Balance",
                 gradient: [Color(hex: "F97316"), Color(hex: "EA580C")]
             )
@@ -225,7 +229,7 @@ struct OlasWalletView: View {
             // Today's Activity
             ModernStatCard(
                 icon: "arrow.up.arrow.down",
-                value: "\(walletManager.recentTransactions.filter { Calendar.current.isDateInToday($0.timestamp) }.count)",
+                value: "\(recentTransactions.filter { Calendar.current.isDateInToday($0.timestamp) }.count)",
                 label: "Today",
                 gradient: [Color(hex: "10B981"), Color(hex: "059669")]
             )
@@ -293,7 +297,7 @@ struct OlasWalletView: View {
                 
                 Spacer()
                 
-                if !walletManager.recentTransactions.isEmpty {
+                if !recentTransactions.isEmpty {
                     NavigationLink(destination: Text("Transaction History")) {
                         HStack(spacing: 4) {
                             Text("See All")
@@ -307,13 +311,13 @@ struct OlasWalletView: View {
             }
             .padding(.horizontal, OlasDesign.Spacing.md)
             
-            if walletManager.recentTransactions.isEmpty {
+            if recentTransactions.isEmpty {
                 EmptyActivityView()
                     .padding(.horizontal, OlasDesign.Spacing.md)
             } else {
                 // Show last 5 transactions with modern design
                 VStack(spacing: OlasDesign.Spacing.xs) {
-                    ForEach(walletManager.recentTransactions.prefix(5)) { transaction in
+                    ForEach(recentTransactions.prefix(5)) { transaction in
                         ModernTransactionRow(transaction: transaction, walletManager: walletManager)
                             .transition(.asymmetric(
                                 insertion: .push(from: .bottom).combined(with: .opacity),
@@ -348,10 +352,26 @@ struct OlasWalletView: View {
     private func refreshWallet() async {
         do {
             try await walletManager.loadWallet()
+            await loadWalletData()
             OlasDesign.Haptic.selection()
         } catch {
             print("Failed to refresh wallet: \(error)")
         }
+    }
+    
+    private func loadWalletData() async {
+        // Load wallet configuration status
+        isWalletConfigured = await walletManager.isWalletConfigured
+        
+        // Load balance
+        currentBalance = await walletManager.currentBalance
+        
+        // Load mint URLs and balances
+        mintURLs = await walletManager.getActiveMintURLs()
+        mintBalances = await walletManager.getAllMintBalances()
+        
+        // Load transactions
+        recentTransactions = await walletManager.transactions
     }
     
     private func handleScannedCode(_ code: String) {
@@ -366,7 +386,7 @@ struct OlasWalletView: View {
             // Cashu token
             Task {
                 do {
-                    try await walletManager.receiveEcash(code)
+                    _ = try await walletManager.receive(tokenString: code)
                 } catch {
                     print("Failed to redeem token: \(error)")
                 }
@@ -442,25 +462,25 @@ struct MintRow: View {
 
 // MARK: - Transaction Row
 struct TransactionRow: View {
-    let transaction: OlasWalletManager.WalletTransaction
+    let transaction: WalletTransaction
     let walletManager: OlasWalletManager
     @State private var showDetail = false
     
     private var transactionIcon: String {
         switch transaction.type {
-        case .sent, .melted: return "arrow.up.circle.fill"
-        case .received, .minted: return "arrow.down.circle.fill"
-        case .zapped, .nutzapped: return "bolt.heart.fill"
-        case .swapped: return "arrow.triangle.swap"
+        case .send, .melt: return "arrow.up.circle.fill"
+        case .receive, .mint: return "arrow.down.circle.fill"
+        case .nutzapSent, .nutzapReceived: return "bolt.heart.fill"
+        case .swap: return "arrow.triangle.swap"
         }
     }
     
     private var transactionColor: Color {
         switch transaction.type {
-        case .sent, .melted: return Color.orange
-        case .received, .minted: return Color.green
-        case .zapped, .nutzapped: return Color.purple
-        case .swapped: return Color.blue
+        case .send, .melt: return Color.orange
+        case .receive, .mint: return Color.green
+        case .nutzapSent, .nutzapReceived: return Color.purple
+        case .swap: return Color.blue
         }
     }
     
@@ -492,7 +512,7 @@ struct TransactionRow: View {
                 
                 // Transaction details
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(transaction.description)
+                    Text(transaction.memo ?? transaction.displayDescription)
                         .font(OlasDesign.Typography.bodyMedium)
                         .foregroundColor(OlasDesign.Colors.text)
                         .lineLimit(1)
@@ -519,8 +539,8 @@ struct TransactionRow: View {
                 // Amount
                 VStack(alignment: .trailing, spacing: 2) {
                     let isIncoming = transaction.direction == .incoming || 
-                        transaction.type == .received || 
-                        transaction.type == .minted
+                        transaction.type == .receive || 
+                        transaction.type == .mint
                     Text("\(isIncoming ? "+" : "-")\(formatAmount(transaction.amount))")
                         .font(.system(size: 16, weight: .semibold, design: .rounded))
                         .foregroundColor(transactionColor)
@@ -560,14 +580,3 @@ struct TransactionRow: View {
     }
 }
 
-// MARK: - Supporting Types
-struct CashuToken: Identifiable {
-    let id: String
-    let amount: Int
-    let mint: String
-}
-
-enum TransactionType {
-    case sent
-    case received
-}

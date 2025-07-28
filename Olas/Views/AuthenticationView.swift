@@ -172,7 +172,7 @@ struct LoginSheet: View {
                                 .font(.system(size: 28, weight: .semibold, design: .rounded))
                                 .foregroundStyle(.white)
                             
-                            Text("Enter your private key to continue")
+                            Text("Enter your private key (nsec or hex format)")
                                 .font(OlasDesign.Typography.body)
                                 .foregroundStyle(.white.opacity(0.7))
                         }
@@ -201,6 +201,7 @@ struct LoginSheet: View {
                                 .autocapitalization(.none)
                                 #endif
                                 .autocorrectionDisabled()
+                                .accessibilityIdentifier("privateKeyField")
                         }
                         .padding(.horizontal, OlasDesign.Spacing.xl)
                         
@@ -282,11 +283,15 @@ struct LoginSheet: View {
             do {
                 try await nostrManager.login(with: privateKey)
                 OlasDesign.Haptic.success()
-                dismiss()
+                await MainActor.run {
+                    dismiss()
+                }
             } catch {
-                isLoading = false
-                errorMessage = error.localizedDescription
-                showError = true
+                await MainActor.run {
+                    self.isLoading = false
+                    self.errorMessage = error.localizedDescription
+                    self.showError = true
+                }
                 OlasDesign.Haptic.error()
             }
         }

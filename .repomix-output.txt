@@ -44,6 +44,16 @@ The content is organized as follows:
 </file_summary>
 
 <directory_structure>
+.github/
+  workflows/
+    ci.yml
+    testflight.yml
+maestro/
+  config.yaml
+  create_account_test.yaml
+  login_with_hex_test.yaml
+  login_with_nsec_test.yaml
+  README.md
 Olas/
   App/
     AppState.swift
@@ -61,11 +71,9 @@ Olas/
     BlossomServerManager.swift
     Color+Extensions.swift
     DesignSystem.swift
-    DirectMessagesManager.swift
     ImetaUtils.swift
     NostrManager.swift
     StoriesManager.swift
-    VideoManager.swift
     WalletManager.swift
   Utils/
     OlasUtilities.swift
@@ -91,10 +99,6 @@ Olas/
       ExploreView.swift
       HashtagView.swift
       TrendingHashtagPill.swift
-    Messages/
-      ConversationView.swift
-      MessagesListView.swift
-      NewMessageView.swift
     Onboarding/
       OnboardingView.swift
     Profile/
@@ -141,7 +145,12 @@ Olas/
   LaunchScreen.storyboard
 Olas.xcodeproj/
   project.xcworkspace/
+    xcshareddata/
+      swiftpm/
+        configuration/
+        Package.resolved
     contents.xcworkspacedata
+  xcshareddata/
 Sources/
   Olas/
     App/
@@ -172,17 +181,446 @@ Sources/
 Tests/
   OlasTests/
     OlasTests.swift
+.gitignore
 build.sh
 deploy.sh
+ExportOptions-TestFlight.plist
+LICENSE
 MODERNIZATION_SUMMARY.md
 Olas-progress.md
 Package.swift
 project.yml
+README.md
 refresh-project.sh
 </directory_structure>
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="maestro/config.yaml">
+# Maestro Configuration for Olas
+# Test Tags - useful for organizing and filtering tests
+tags:
+  - auth
+  - onboarding
+  - account
+# Environment variables (if needed)
+env:
+  APP_ID: com.olas.app
+# Global test configuration
+testExecutionOrder: sequential
+# Test flows
+flows:
+  - create_account_test.yaml
+  - login_with_nsec_test.yaml
+  - login_with_hex_test.yaml
+</file>
+
+<file path="maestro/create_account_test.yaml">
+appId: com.olas.app
+---
+- launchApp
+# Wait for the app to load
+- waitForAnimationToEnd
+# Verify we're on the authentication screen
+- assertVisible: "Olas"
+- assertVisible: "Welcome back"
+# Tap "I'm New Here" button
+- tapOn: "I'm New Here"
+# Wait for onboarding screen
+- waitForAnimationToEnd
+# Page 1: Welcome Page
+- assertVisible: "Picture-First Social"
+- swipe:
+    direction: LEFT
+# Page 2: Nostr Explainer
+- assertVisible: "Your Content, Everywhere"
+- swipe:
+    direction: LEFT
+# Page 3: Key Generation
+- assertVisible: "Creating Your Identity"
+# Wait for automatic key generation (happens after 2 seconds)
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "Your Identity is Ready"
+- swipe:
+    direction: LEFT
+# Page 4: Security Education
+- assertVisible: "Your Keys, Your Control"
+- assertVisible: "Get Started"
+- tapOn: "Get Started"
+# Wait for account creation and main feed
+- waitForAnimationToEnd:
+    timeout: 10000
+# Verify we're now on the main feed
+- assertVisible:
+    text: "Olas"
+    index: 0
+# Verify bottom tab bar is visible (indicates successful login)
+- assertVisible:
+    id: "mainTabBar"
+# Verify feed tab is selected
+- assertVisible:
+    id: "feedTab"
+# Optional: Verify profile was created by navigating to profile
+- tapOn:
+    id: "profileTab"
+- waitForAnimationToEnd
+# Should see the default display name from onboarding
+- assertVisible: "Olas User"
+</file>
+
+<file path="maestro/login_with_hex_test.yaml">
+appId: com.olas.app
+---
+- launchApp
+# Wait for the app to load
+- waitForAnimationToEnd
+# Verify we're on the authentication screen
+- assertVisible: "Olas"
+- assertVisible: "Welcome back"
+# Tap "I Have an Account" button
+- tapOn: "I Have an Account"
+# Wait for login sheet
+- waitForAnimationToEnd
+# Verify login sheet elements
+- assertVisible: "Welcome Back"
+- assertVisible: "Enter your private key (nsec or hex format)"
+# Enter a hex private key (this is a test key - DO NOT use real keys in tests)
+- tapOn:
+    id: "privateKeyField"
+- inputText: "7f3b464b9ff3623630485983fdf8c44b4b8abfe3dcd3dc2fe8c9ed82e5d584f6"
+# Tap login button
+- tapOn: "Login"
+# Wait for login to complete
+- waitForAnimationToEnd:
+    timeout: 10000
+# Verify we're now on the main feed
+- assertVisible:
+    text: "Olas"
+    index: 0
+# Verify bottom tab bar is visible (indicates successful login)
+- assertVisible:
+    id: "mainTabBar"
+# Verify feed tab is selected
+- assertVisible:
+    id: "feedTab"
+</file>
+
+<file path="maestro/login_with_nsec_test.yaml">
+appId: com.olas.app
+---
+- launchApp
+# Wait for the app to load
+- waitForAnimationToEnd
+# Verify we're on the authentication screen
+- assertVisible: "Olas"
+- assertVisible: "Welcome back"
+# Tap "I Have an Account" button
+- tapOn: "I Have an Account"
+# Wait for login sheet
+- waitForAnimationToEnd
+# Verify login sheet elements
+- assertVisible: "Welcome Back"
+- assertVisible: "Enter your private key (nsec or hex format)"
+# Enter an nsec key (this is a test key - DO NOT use real keys in tests)
+- tapOn:
+    id: "privateKeyField"
+- inputText: "nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5"
+# Tap login button
+- tapOn: "Login"
+# Wait for login to complete
+- waitForAnimationToEnd:
+    timeout: 10000
+# Verify we're now on the main feed
+- assertVisible:
+    text: "Olas"
+    index: 0
+# Verify bottom tab bar is visible (indicates successful login)
+- assertVisible:
+    id: "mainTabBar"
+# Verify feed tab is selected
+- assertVisible:
+    id: "feedTab"
+</file>
+
+<file path="maestro/README.md">
+# Olas Maestro Tests
+
+This directory contains Maestro UI tests for the Olas iOS app.
+
+## Prerequisites
+
+1. Install Maestro CLI:
+```bash
+curl -Ls "https://get.maestro.mobile.dev" | bash
+```
+
+2. Make sure you have the iOS Simulator installed via Xcode.
+
+## Running Tests
+
+### Run all tests:
+```bash
+maestro test maestro/
+```
+
+### Run a specific test:
+```bash
+maestro test maestro/create_account_test.yaml
+```
+
+### Run tests with specific device:
+```bash
+maestro test --device "iPhone 15 Pro" maestro/
+```
+
+## Test Files
+
+- `create_account_test.yaml` - Tests the new account creation flow through onboarding
+- `login_with_nsec_test.yaml` - Tests login with nsec private key format
+- `login_with_hex_test.yaml` - Tests login with hex private key format
+- `config.yaml` - Maestro configuration file
+
+## Important Notes
+
+1. **Private Keys**: The private keys used in the login tests are TEST KEYS ONLY. Never use real private keys in test files.
+
+2. **Test Data**: Account creation uses dynamic timestamps to ensure unique usernames.
+
+3. **Timeouts**: Some operations (like account creation) may take time due to network requests. Timeouts are configured accordingly.
+
+## Writing New Tests
+
+When adding new tests:
+
+1. Use accessibility identifiers in the SwiftUI code for reliable element selection
+2. Add appropriate waits for animations and network operations
+3. Keep tests focused on a single user flow
+4. Document any test data requirements
+
+## Troubleshooting
+
+- If tests fail on element not found, check that accessibility identifiers are properly set in the code
+- For timing issues, increase timeout values or add `waitForAnimationToEnd` commands
+- Use `maestro studio` to interactively explore the app and find elements
+</file>
+
+<file path="Olas.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved">
+{
+  "originHash" : "4bbea0d3b72726fa4bd0f2e2af7ec8b45cdc1d533cb0a1a8a6dfdc1e577aac17",
+  "pins" : [
+    {
+      "identity" : "base58",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/anquii/Base58.git",
+      "state" : {
+        "revision" : "7e4a1e4e6813c750ed2f9e80a0494c608eebb2ca",
+        "version" : "1.0.1"
+      }
+    },
+    {
+      "identity" : "base58check",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/anquii/Base58Check.git",
+      "state" : {
+        "revision" : "f35a770ff7f3fd553cc44057f492c0107cc7b481",
+        "version" : "1.0.1"
+      }
+    },
+    {
+      "identity" : "bigint",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/attaswift/BigInt.git",
+      "state" : {
+        "revision" : "0ed110f7555c34ff468e72e1686e59721f2b0da6",
+        "version" : "5.3.0"
+      }
+    },
+    {
+      "identity" : "bip32",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/zeugmaster/BIP32.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "1be94093fb7fe87dc0ccc8e2c041cc05218efff6"
+      }
+    },
+    {
+      "identity" : "bip39",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/pengpengliu/BIP39.git",
+      "state" : {
+        "revision" : "e79bd90275e50643cf8f97208ffa536d0def3ec7",
+        "version" : "1.0.1"
+      }
+    },
+    {
+      "identity" : "cashuswift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/zeugmaster/CashuSwift.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "d703a9b2035d1240e4476d3c37d2cd967f0c3d75"
+      }
+    },
+    {
+      "identity" : "cryptoswiftwrapper",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/anquii/CryptoSwiftWrapper.git",
+      "state" : {
+        "revision" : "0d57e806de368b5d2364fabb7c789b48661ec90c",
+        "version" : "1.4.3"
+      }
+    },
+    {
+      "identity" : "grdb.swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/groue/GRDB.swift.git",
+      "state" : {
+        "revision" : "2cf6c756e1e5ef6901ebae16576a7e4e4b834622",
+        "version" : "6.29.3"
+      }
+    },
+    {
+      "identity" : "ndkswift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/pablof7z/NDKSwift",
+      "state" : {
+        "branch" : "master",
+        "revision" : "c88959125ef52409f3976d4c8fcfc0e4874b7872"
+      }
+    },
+    {
+      "identity" : "ripemd160",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/anquii/RIPEMD160.git",
+      "state" : {
+        "revision" : "15679c6fe1f3ae32ec1bad63bcc45aa422954f01",
+        "version" : "1.0.0"
+      }
+    },
+    {
+      "identity" : "swift-bigint",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/mkrd/Swift-BigInt.git",
+      "state" : {
+        "revision" : "b07e961f4c999671cf8c2dc80e740899e8946013",
+        "version" : "2.3.0"
+      }
+    },
+    {
+      "identity" : "swift-secp256k1",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/zeugmaster/swift-secp256k1.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "73cf2403b7a69de8efc612d251a6e0d01211e1c4"
+      }
+    },
+    {
+      "identity" : "swiftcbor",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/myfreeweb/SwiftCBOR.git",
+      "state" : {
+        "revision" : "04ccff117f6549121d5721ec84fdf0162122b90e",
+        "version" : "0.5.0"
+      }
+    }
+  ],
+  "version" : 3
+}
+</file>
+
+<file path=".github/workflows/ci.yml">
+name: CI
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+jobs:
+  build:
+    name: Build and Test
+    runs-on: macos-14
+    steps:
+    - uses: actions/checkout@v4
+    - name: Select Xcode
+      run: sudo xcode-select -s /Applications/Xcode_15.4.app
+    - name: Install XcodeGen
+      run: brew install xcodegen
+    - name: Install xcbeautify
+      run: brew install xcbeautify
+    - name: Generate Xcode project
+      run: ./refresh-project.sh
+    - name: Build
+      run: |
+        xcodebuild build \
+          -project Olas.xcodeproj \
+          -scheme Olas \
+          -destination 'platform=iOS Simulator,name=iPhone 15 Pro' \
+          | xcbeautify
+    - name: Run tests
+      run: |
+        xcodebuild test \
+          -project Olas.xcodeproj \
+          -scheme Olas \
+          -destination 'platform=iOS Simulator,name=iPhone 15 Pro' \
+          | xcbeautify || true
+</file>
+
+<file path=".github/workflows/testflight.yml">
+name: Deploy to TestFlight
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+jobs:
+  deploy:
+    name: Deploy to TestFlight
+    runs-on: macos-14
+    steps:
+    - uses: actions/checkout@v4
+    - name: Select Xcode
+      run: sudo xcode-select -s /Applications/Xcode_15.4.app
+    - name: Install dependencies
+      run: |
+        brew install xcodegen
+        brew install xcbeautify
+    - name: Setup API Key
+      env:
+        APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+      run: |
+        mkdir -p ~/.appstoreconnect/private_keys
+        echo "$APP_STORE_CONNECT_API_KEY" > ~/.appstoreconnect/private_keys/AuthKey_6VZ4NHWMQN.p8
+    - name: Generate Xcode project
+      run: ./refresh-project.sh
+    - name: Build and deploy
+      env:
+        API_KEY_ID: "6VZ4NHWMQN"
+        API_ISSUER_ID: "0acdb473-8d3f-4eba-85bc-d2de82234bea"
+      run: |
+        xcodebuild archive \
+          -project Olas.xcodeproj \
+          -scheme Olas \
+          -configuration Release \
+          -archivePath build/Olas.xcarchive \
+          -destination "generic/platform=iOS" \
+          CODE_SIGN_STYLE=Automatic \
+          DEVELOPMENT_TEAM="456SHKPP26" \
+          | xcbeautify
+        xcodebuild -exportArchive \
+          -archivePath build/Olas.xcarchive \
+          -exportPath build \
+          -exportOptionsPlist ExportOptions-TestFlight.plist \
+          | xcbeautify
+        xcrun altool --upload-app \
+          -f build/Olas.ipa \
+          -t ios \
+          --apiKey "$API_KEY_ID" \
+          --apiIssuer "$API_ISSUER_ID"
+</file>
 
 <file path="Olas/App/AppState.swift">
 import SwiftUI
@@ -209,16 +647,22 @@ class AppState: ObservableObject {
     }
     private func observeAuthState() async {
         guard let nostrManager = nostrManager else { return }
-        // Update auth state based on NostrManager
-        withObservationTracking {
-            _ = nostrManager.isAuthenticated
-        } onChange: { [weak self] in
-            Task { @MainActor in
-                await self?.updateAuthState()
-            }
-        }
         // Initial update
         await updateAuthState()
+        // Continuously observe auth state changes
+        Task { @MainActor in
+            while true {
+                withObservationTracking {
+                    _ = nostrManager.isAuthenticated
+                } onChange: { [weak self] in
+                    Task { @MainActor in
+                        await self?.updateAuthState()
+                    }
+                }
+                // Check every second for auth state changes
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+        }
     }
     private func updateAuthState() async {
         guard let nostrManager = nostrManager else { return }
@@ -851,7 +1295,7 @@ public class UserPostsDataSource: ObservableObject {
     @Published public private(set) var error: Error?
     private let dataSource: NDKDataSource<NDKEvent>
     public init(ndk: NDK, pubkey: String, includeReplies: Bool = false) {
-        var filter = NDKFilter(
+        let filter = NDKFilter(
             authors: [pubkey],
             kinds: [EventKind.textNote]
         )
@@ -1376,316 +1820,6 @@ struct OlasLoadingView: View {
 // RelativeTimeFormatter is defined in StoriesManager.swift
 </file>
 
-<file path="Olas/Models/DirectMessagesManager.swift">
-import Foundation
-import SwiftUI
-import NDKSwift
-import CryptoKit
-@MainActor
-class DirectMessagesManager: ObservableObject {
-    @Published var conversations: [DMConversation] = []
-    @Published var unreadCount = 0
-    @Published var isLoading = false
-    @Published var currentMessages: [DirectMessage] = []
-    private let nostrManager: NostrManager
-    private var dmTask: Task<Void, Never>?
-    private var profileTasks: [String: Task<Void, Never>] = [:]
-    // NIP-17 Private Direct Messages
-    private let dmKind = 1059 // Encrypted direct message
-    private let dmNotificationKind = 24133 // DM notification/metadata
-    init(nostrManager: NostrManager) {
-        self.nostrManager = nostrManager
-    }
-    deinit {
-        dmTask?.cancel()
-        profileTasks.values.forEach { $0.cancel() }
-    }
-    func startObservingMessages() {
-        dmTask?.cancel()
-        guard let ndk = nostrManager.ndk,
-              let signer = ndk.signer else { return }
-        dmTask = Task {
-            guard let myPubkey = try? await signer.pubkey else { return }
-            isLoading = true
-            // Observe encrypted DMs (NIP-17)
-            let filter = NDKFilter(
-                kinds: [dmKind],
-                tags: ["p": Set([myPubkey])] // Messages where I'm tagged
-            )
-            let dataSource = ndk.observe(
-                filter: filter,
-                maxAge: 0,
-                cachePolicy: .cacheWithNetwork
-            )
-            var messagesByConversation: [String: [DirectMessage]] = [:]
-            for await event in dataSource.events {
-                // Decrypt and process message
-                if let message = await decryptMessage(event: event, signer: signer) {
-                    let conversationKey = getConversationKey(myPubkey: myPubkey, otherPubkey: message.senderPubkey)
-                    if messagesByConversation[conversationKey] == nil {
-                        messagesByConversation[conversationKey] = []
-                    }
-                    messagesByConversation[conversationKey]?.append(message)
-                    // Update conversations
-                    await updateConversations(from: messagesByConversation, myPubkey: myPubkey)
-                    // Load profile for sender
-                    loadProfileForPubkey(message.senderPubkey)
-                }
-            }
-            isLoading = false
-        }
-    }
-    private func decryptMessage(event: NDKEvent, signer: NDKSigner) async -> DirectMessage? {
-        // NIP-17 decryption
-        // This is a simplified version - real implementation would use NIP-44 encryption
-        // For now, return a mock message structure
-        // TODO: Implement proper NIP-17/NIP-44 decryption
-        let message = DirectMessage(
-            id: event.id,
-            senderPubkey: event.pubkey,
-            recipientPubkey: "", // Extract from tags
-            content: event.content, // This would be decrypted
-            timestamp: Date(timeIntervalSince1970: TimeInterval(event.createdAt)),
-            event: event,
-            isRead: false,
-            mediaAttachments: []
-        )
-        return message
-    }
-    private func getConversationKey(myPubkey: String, otherPubkey: String) -> String {
-        // Create consistent conversation key regardless of who sent the message
-        let sorted = [myPubkey, otherPubkey].sorted()
-        return "\(sorted[0])_\(sorted[1])"
-    }
-    private func updateConversations(from messagesByConversation: [String: [DirectMessage]], myPubkey: String) {
-        var updatedConversations: [DMConversation] = []
-        for (conversationKey, messages) in messagesByConversation {
-            let participants = conversationKey.split(separator: "_").map(String.init)
-            let otherPubkey = participants.first { $0 != myPubkey } ?? ""
-            let sortedMessages = messages.sorted { $0.timestamp < $1.timestamp }
-            let lastMessage = sortedMessages.last
-            let unreadCount = messages.filter { !$0.isRead && $0.senderPubkey != myPubkey }.count
-            let conversation = DMConversation(
-                id: conversationKey,
-                participants: participants,
-                messages: sortedMessages,
-                lastMessage: lastMessage,
-                unreadCount: unreadCount,
-                otherParticipantPubkey: otherPubkey
-            )
-            updatedConversations.append(conversation)
-        }
-        // Sort by last message time
-        conversations = updatedConversations.sorted {
-            ($0.lastMessage?.timestamp ?? Date.distantPast) > ($1.lastMessage?.timestamp ?? Date.distantPast)
-        }
-        // Update total unread count
-        unreadCount = conversations.reduce(0) { $0 + $1.unreadCount }
-    }
-    func sendMessage(to recipientPubkey: String, content: String, mediaURLs: [String] = []) async throws {
-        guard let ndk = nostrManager.ndk,
-              let signer = ndk.signer else {
-            throw DMError.notAuthenticated
-        }
-        // Create encrypted message content
-        let messageContent = DMContent(
-            text: content,
-            mediaURLs: mediaURLs,
-            timestamp: Date()
-        )
-        // Encrypt content (NIP-17/NIP-44)
-        // TODO: Implement proper encryption
-        let encryptedContent = content // Placeholder
-        // Create DM event
-        let tags: [[String]] = [
-            ["p", recipientPubkey], // Recipient
-            ["encrypted"] // Mark as encrypted
-        ]
-        let dmEvent = try await NDKEventBuilder(ndk: ndk)
-            .kind(dmKind)
-            .content(encryptedContent)
-            .tags(tags)
-            .build(signer: signer)
-        _ = try await ndk.publish(dmEvent)
-        // Add to local messages immediately
-        let myPubkey = try await signer.pubkey
-        let message = DirectMessage(
-            id: dmEvent.id,
-            senderPubkey: myPubkey,
-            recipientPubkey: recipientPubkey,
-            content: content,
-            timestamp: Date(),
-            event: dmEvent,
-            isRead: true,
-            mediaAttachments: mediaURLs.map { MediaAttachment(url: $0, type: .image) }
-        )
-        // Update conversation
-        let conversationKey = getConversationKey(myPubkey: myPubkey, otherPubkey: recipientPubkey)
-        if let index = conversations.firstIndex(where: { $0.id == conversationKey }) {
-            conversations[index].messages.append(message)
-            conversations[index].lastMessage = message
-        } else {
-            // Create new conversation
-            let conversation = DMConversation(
-                id: conversationKey,
-                participants: [myPubkey, recipientPubkey],
-                messages: [message],
-                lastMessage: message,
-                unreadCount: 0,
-                otherParticipantPubkey: recipientPubkey
-            )
-            conversations.insert(conversation, at: 0)
-        }
-    }
-    func markConversationAsRead(_ conversationId: String) {
-        guard let index = conversations.firstIndex(where: { $0.id == conversationId }) else { return }
-        // Mark all messages as read
-        for i in conversations[index].messages.indices {
-            conversations[index].messages[i].isRead = true
-        }
-        conversations[index].unreadCount = 0
-        // Update total unread count
-        unreadCount = conversations.reduce(0) { $0 + $1.unreadCount }
-        // Save read status
-        saveReadStatus(conversationId: conversationId)
-    }
-    func deleteMessage(_ messageId: String) async throws {
-        guard let ndk = nostrManager.ndk,
-              let signer = ndk.signer else {
-            throw DMError.notAuthenticated
-        }
-        // Create deletion event
-        let deletionEvent = try await NDKEventBuilder(ndk: ndk)
-            .kind(EventKind.deletion)
-            .content("Message deleted")
-            .tags([
-                ["e", messageId],
-                ["k", "\(dmKind)"]
-            ])
-            .build(signer: signer)
-        _ = try await ndk.publish(deletionEvent)
-        // Remove from local state
-        for i in conversations.indices {
-            conversations[i].messages.removeAll { $0.id == messageId }
-        }
-    }
-    func loadConversation(with pubkey: String) async {
-        guard let ndk = nostrManager.ndk,
-              let signer = ndk.signer,
-              let myPubkey = try? await signer.pubkey else { return }
-        let conversationKey = getConversationKey(myPubkey: myPubkey, otherPubkey: pubkey)
-        if let conversation = conversations.first(where: { $0.id == conversationKey }) {
-            currentMessages = conversation.messages
-            markConversationAsRead(conversationKey)
-        } else {
-            currentMessages = []
-        }
-    }
-    private func loadProfileForPubkey(_ pubkey: String) {
-        guard let profileManager = nostrManager.ndk?.profileManager else { return }
-        profileTasks[pubkey]?.cancel()
-        profileTasks[pubkey] = Task {
-            for await profile in await profileManager.observe(for: pubkey, maxAge: 3600) {
-                if let profile = profile {
-                    // Update conversations with profile
-                    for i in conversations.indices {
-                        if conversations[i].otherParticipantPubkey == pubkey {
-                            conversations[i].otherParticipantProfile = profile
-                        }
-                    }
-                }
-                break
-            }
-        }
-    }
-    private func saveReadStatus(conversationId: String) {
-        UserDefaults.standard.set(Date(), forKey: "dm_read_\(conversationId)")
-    }
-    private func loadReadStatus(conversationId: String) -> Date? {
-        UserDefaults.standard.object(forKey: "dm_read_\(conversationId)") as? Date
-    }
-}
-// MARK: - Models
-struct DMConversation: Identifiable {
-    let id: String
-    let participants: [String]
-    var messages: [DirectMessage]
-    var lastMessage: DirectMessage?
-    var unreadCount: Int
-    let otherParticipantPubkey: String
-    var otherParticipantProfile: NDKUserProfile?
-    var displayName: String {
-        otherParticipantProfile?.displayName ?? 
-        otherParticipantProfile?.name ?? 
-        String(otherParticipantPubkey.prefix(8)) + "..."
-    }
-    var lastMessagePreview: String {
-        guard let lastMessage = lastMessage else { return "No messages" }
-        if lastMessage.mediaAttachments.isEmpty {
-            return lastMessage.content
-        } else if lastMessage.content.isEmpty {
-            return "📷 Photo"
-        } else {
-            return "📷 \(lastMessage.content)"
-        }
-    }
-}
-struct DirectMessage: Identifiable {
-    let id: String
-    let senderPubkey: String
-    let recipientPubkey: String
-    let content: String
-    let timestamp: Date
-    let event: NDKEvent
-    var isRead: Bool
-    let mediaAttachments: [MediaAttachment]
-    var senderProfile: NDKUserProfile?
-    var isFromMe: Bool {
-        // This would check against current user's pubkey
-        false
-    }
-}
-struct MediaAttachment: Identifiable {
-    let id = UUID()
-    let url: String
-    let type: MediaType
-    let blurhash: String?
-    init(url: String, type: MediaType, blurhash: String? = nil) {
-        self.url = url
-        self.type = type
-        self.blurhash = blurhash
-    }
-}
-enum MediaType {
-    case image
-    case video
-    case audio
-}
-struct DMContent: Codable {
-    let text: String
-    let mediaURLs: [String]
-    let timestamp: Date
-}
-enum DMError: LocalizedError {
-    case notAuthenticated
-    case encryptionFailed
-    case decryptionFailed
-    case messageSendFailed
-    var errorDescription: String? {
-        switch self {
-        case .notAuthenticated:
-            return "You must be logged in to send messages"
-        case .encryptionFailed:
-            return "Failed to encrypt message"
-        case .decryptionFailed:
-            return "Failed to decrypt message"
-        case .messageSendFailed:
-            return "Failed to send message"
-        }
-    }
-}
-</file>
-
 <file path="Olas/Models/ImetaUtils.swift">
 import Foundation
 import NDKSwift
@@ -1830,6 +1964,8 @@ class NostrManager {
         if let ndk = ndk {
             print("🎨 [OlasManager] Setting NDK on auth manager")
             ndkAuthManager.setNDK(ndk)
+            // Restore session from keychain (handles automatic session switching)
+            ndkAuthManager.restoreSession()
             // Configure NIP-89 client tags for Olas
             ndk.clientTagConfig = NDKClientTagConfig(
                 name: "Olas",
@@ -1840,6 +1976,15 @@ class NostrManager {
                 ]
             )
             print("🎨 [OlasManager] Configured NIP-89 client tags")
+            // If authenticated after restore, initialize data sources
+            if ndkAuthManager.isAuthenticated {
+                if let signer = ndkAuthManager.activeSigner {
+                    Task {
+                        let pubkey = try await signer.pubkey
+                        await initializeDataSources(for: pubkey)
+                    }
+                }
+            }
         }
         Task {
             await connectToRelays()
@@ -1873,7 +2018,13 @@ class NostrManager {
     }
     func login(with privateKey: String) async throws {
         guard let ndk = ndk else { throw OlasError.ndkNotInitialized }
-        let signer = try NDKPrivateKeySigner(privateKey: privateKey)
+        // Create signer - NDKPrivateKeySigner handles both nsec and hex formats
+        let signer: NDKPrivateKeySigner
+        if privateKey.hasPrefix("nsec1") {
+            signer = try NDKPrivateKeySigner(nsec: privateKey)
+        } else {
+            signer = try NDKPrivateKeySigner(privateKey: privateKey)
+        }
         // Start session with follow list and mute list support
         try await ndk.startSession(
             signer: signer,
@@ -1882,6 +2033,14 @@ class NostrManager {
                 preloadStrategy: .progressive
             )
         )
+        // Create auth session for persistence
+        let session = try await ndkAuthManager.createSession(
+            with: signer,
+            requiresBiometric: false,
+            isHardwareBacked: false
+        )
+        // Switch to the new session
+        try await ndkAuthManager.switchToSession(session)
         let publicKey = try await signer.pubkey
         print("Logged in with public key: \(publicKey)")
         // Initialize declarative data sources
@@ -2059,12 +2218,13 @@ class NostrManager {
 enum OlasError: LocalizedError {
     case ndkNotInitialized
     case invalidKey
+    case invalidPrivateKey
     case profileCreationFailed
     var errorDescription: String? {
         switch self {
         case .ndkNotInitialized:
             return "Network connection not ready. Please try again."
-        case .invalidKey:
+        case .invalidKey, .invalidPrivateKey:
             return "Invalid private key format."
         case .profileCreationFailed:
             return "Failed to create profile. Please try again."
@@ -2344,263 +2504,6 @@ struct RelativeTimeFormatter {
 }
 </file>
 
-<file path="Olas/Models/VideoManager.swift">
-import Foundation
-import AVFoundation
-import SwiftUI
-import NDKSwift
-import CryptoKit
-import Photos
-@MainActor
-class VideoManager: ObservableObject {
-    @Published var isRecording = false
-    @Published var recordedVideoURL: URL?
-    @Published var videoDuration: TimeInterval = 0
-    @Published var thumbnailImage: UIImage?
-    private let maxVideoDuration: TimeInterval = 60.0 // 60 seconds max
-    private var recordingTimer: Timer?
-    func requestCameraPermission() async -> Bool {
-        let status = AVCaptureDevice.authorizationStatus(for: .video)
-        switch status {
-        case .authorized:
-            return true
-        case .notDetermined:
-            return await AVCaptureDevice.requestAccess(for: .video)
-        default:
-            return false
-        }
-    }
-    func generateThumbnail(for videoURL: URL) async -> UIImage? {
-        let asset = AVAsset(url: videoURL)
-        let imageGenerator = AVAssetImageGenerator(asset: asset)
-        imageGenerator.appliesPreferredTrackTransform = true
-        let time = CMTime(seconds: 0, preferredTimescale: 1)
-        do {
-            let cgImage = try imageGenerator.copyCGImage(at: time, actualTime: nil)
-            return UIImage(cgImage: cgImage)
-        } catch {
-            print("Error generating thumbnail: \(error)")
-            return nil
-        }
-    }
-    func compressVideo(inputURL: URL) async throws -> Data {
-        let asset = AVAsset(url: inputURL)
-        guard let exportSession = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetMediumQuality) else {
-            throw VideoError.compressionFailed
-        }
-        let outputURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension("mp4")
-        exportSession.outputURL = outputURL
-        exportSession.outputFileType = .mp4
-        exportSession.shouldOptimizeForNetworkUse = true
-        await exportSession.export()
-        guard exportSession.status == .completed else {
-            throw VideoError.compressionFailed
-        }
-        let compressedData = try Data(contentsOf: outputURL)
-        try? FileManager.default.removeItem(at: outputURL)
-        return compressedData
-    }
-    func saveVideoToPhotos(_ url: URL) async throws {
-        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
-        guard status == .authorized else {
-            throw VideoError.photoLibraryAccessDenied
-        }
-        try await PHPhotoLibrary.shared().performChanges {
-            PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
-        }
-    }
-}
-enum VideoError: LocalizedError {
-    case compressionFailed
-    case uploadFailed
-    case photoLibraryAccessDenied
-    case invalidVideo
-    var errorDescription: String? {
-        switch self {
-        case .compressionFailed:
-            return "Failed to compress video"
-        case .uploadFailed:
-            return "Failed to upload video"
-        case .photoLibraryAccessDenied:
-            return "Photo library access denied"
-        case .invalidVideo:
-            return "Invalid video file"
-        }
-    }
-}
-// MARK: - Video Player View
-struct OlasVideoPlayer: View {
-    let url: URL
-    @State private var player: AVPlayer?
-    @State private var isPlaying = false
-    @State private var showControls = true
-    @State private var hideControlsTask: Task<Void, Never>?
-    var body: some View {
-        ZStack {
-            VideoPlayer(player: player)
-                .onAppear {
-                    player = AVPlayer(url: url)
-                    player?.play()
-                    isPlaying = true
-                    // Loop video
-                    NotificationCenter.default.addObserver(
-                        forName: .AVPlayerItemDidPlayToEndTime,
-                        object: player?.currentItem,
-                        queue: .main
-                    ) { _ in
-                        player?.seek(to: .zero)
-                        player?.play()
-                    }
-                }
-                .onDisappear {
-                    player?.pause()
-                    player = nil
-                }
-                .onTapGesture {
-                    showControls.toggle()
-                    if showControls {
-                        scheduleHideControls()
-                    }
-                }
-            if showControls {
-                VStack {
-                    Spacer()
-                    HStack {
-                        Button(action: togglePlayPause) {
-                            Image(systemName: isPlaying ? "pause.fill" : "play.fill")
-                                .font(.title)
-                                .foregroundColor(.white)
-                                .padding()
-                                .background(Circle().fill(Color.black.opacity(0.5)))
-                        }
-                        Spacer()
-                        Button(action: {
-                            // Mute/unmute
-                            if let player = player {
-                                player.isMuted.toggle()
-                            }
-                        }) {
-                            Image(systemName: player?.isMuted == true ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                                .font(.title3)
-                                .foregroundColor(.white)
-                                .padding()
-                                .background(Circle().fill(Color.black.opacity(0.5)))
-                        }
-                    }
-                    .padding()
-                }
-                .transition(.opacity)
-            }
-        }
-        .onAppear {
-            scheduleHideControls()
-        }
-    }
-    private func togglePlayPause() {
-        if isPlaying {
-            player?.pause()
-        } else {
-            player?.play()
-        }
-        isPlaying.toggle()
-        scheduleHideControls()
-    }
-    private func scheduleHideControls() {
-        hideControlsTask?.cancel()
-        hideControlsTask = Task {
-            try? await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds
-            withAnimation {
-                showControls = false
-            }
-        }
-    }
-}
-// MARK: - Camera View for Video Recording
-struct OlasVideoCameraView: UIViewControllerRepresentable {
-    @Binding var videoURL: URL?
-    @Binding var isRecording: Bool
-    let onDismiss: () -> Void
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.sourceType = .camera
-        picker.mediaTypes = ["public.movie"]
-        picker.videoMaximumDuration = 60.0
-        picker.videoQuality = .typeHigh
-        picker.delegate = context.coordinator
-        picker.cameraCaptureMode = .video
-        return picker
-    }
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-    class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
-        let parent: OlasVideoCameraView
-        init(_ parent: OlasVideoCameraView) {
-            self.parent = parent
-        }
-        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
-            if let videoURL = info[.mediaURL] as? URL {
-                parent.videoURL = videoURL
-            }
-            parent.onDismiss()
-        }
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            parent.onDismiss()
-        }
-    }
-}
-// MARK: - Video Thumbnail View
-struct VideoThumbnailView: View {
-    let videoURL: URL
-    @State private var thumbnail: UIImage?
-    var body: some View {
-        ZStack {
-            if let thumbnail = thumbnail {
-                Image(uiImage: thumbnail)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } else {
-                Rectangle()
-                    .fill(Color.gray.opacity(0.3))
-                    .overlay(
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle())
-                    )
-            }
-            // Play button overlay
-            Image(systemName: "play.circle.fill")
-                .font(.system(size: 50))
-                .foregroundColor(.white)
-                .shadow(color: .black.opacity(0.3), radius: 5)
-        }
-        .task {
-            thumbnail = await generateThumbnail()
-        }
-    }
-    private func generateThumbnail() async -> UIImage? {
-        let asset = AVAsset(url: videoURL)
-        let imageGenerator = AVAssetImageGenerator(asset: asset)
-        imageGenerator.appliesPreferredTrackTransform = true
-        let time = CMTime(seconds: 1, preferredTimescale: 1)
-        do {
-            let cgImage = try imageGenerator.copyCGImage(at: time, actualTime: nil)
-            return UIImage(cgImage: cgImage)
-        } catch {
-            return nil
-        }
-    }
-}
-// MARK: - Video Extensions
-extension AVPlayer {
-    var isPlaying: Bool {
-        return rate != 0 && error == nil
-    }
-}
-</file>
-
 <file path="Olas/Models/WalletManager.swift">
 import Foundation
 import NDKSwift
@@ -2852,31 +2755,26 @@ class OlasWalletManager: ObservableObject {
     }
     /// Generate a lightning invoice to receive payment
     func generateInvoice(amount: Int64, description: String?) async throws -> String {
-        guard let primaryMint = mintURLs.first else {
+        guard mintURLs.first != nil else {
             throw WalletError.walletNotConfigured
         }
         isLoading = true
         defer { isLoading = false }
-        do {
-            // In production, get mint quote
-            // For now, generate mock invoice
-            let quote = UUID().uuidString
-            let invoice = "lnbc\(amount)1pjrmq3pp5" + UUID().uuidString.replacingOccurrences(of: "-", with: "")
-            // Store pending invoice
-            pendingInvoices[quote] = (
-                amount: amount,
-                description: description ?? "Olas payment",
-                expiry: Date().addingTimeInterval(3600)
-            )
-            // Start monitoring for payment
-            Task {
-                await monitorInvoicePayment(quote: quote, amount: amount)
-            }
-            return invoice
-        } catch {
-            print("💰 Failed to generate invoice: \(error)")
-            throw error
+        // In production, get mint quote
+        // For now, generate mock invoice
+        let quote = UUID().uuidString
+        let invoice = "lnbc\(amount)1pjrmq3pp5" + UUID().uuidString.replacingOccurrences(of: "-", with: "")
+        // Store pending invoice
+        pendingInvoices[quote] = (
+            amount: amount,
+            description: description ?? "Olas payment",
+            expiry: Date().addingTimeInterval(3600)
+        )
+        // Start monitoring for payment
+        Task {
+            await monitorInvoicePayment(quote: quote, amount: amount)
         }
+        return invoice
     }
     /// Receive ecash tokens
     func receiveEcash(_ tokenString: String) async throws {
@@ -2924,44 +2822,39 @@ class OlasWalletManager: ObservableObject {
         guard let primaryMint = mintURLs.first else { return }
         // Poll for payment (in production, use websocket)
         for _ in 0..<60 { // Check for 5 minutes
-            do {
-                // In production, mint tokens from paid invoice
-                // For now, create mock tokens
-                let tokens = [
-                    WalletToken(amount: UInt64(amount), mint: primaryMint)
-                ]
-                // Payment successful
-                activeTokens.append(contentsOf: tokens)
-                // Remove from pending
-                pendingInvoices.removeValue(forKey: quote)
-                // Record transaction
-                let transaction = WalletTransaction(
-                    type: .received,
-                    amount: amount,
-                    description: "Lightning payment received",
-                    timestamp: Date(),
-                    mint: primaryMint,
-                    invoice: nil,
-                    fee: 0,
-                    status: .completed,
-                    direction: .incoming
-                )
-                await MainActor.run {
-                    recentTransactions.insert(transaction, at: 0)
-                }
-                // Update balance
-                await updateAllBalances()
-                // Store tokens
-                await storeTokens()
-                print("💰 Invoice paid: \(amount) sats received")
-                return
-            } catch {
-                // Not paid yet, wait and retry
-                try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+            // In production, mint tokens from paid invoice
+            // For now, create mock tokens
+            let tokens = [
+                WalletToken(amount: UInt64(amount), mint: primaryMint)
+            ]
+            // Payment successful
+            activeTokens.append(contentsOf: tokens)
+            // Remove from pending
+            pendingInvoices.removeValue(forKey: quote)
+            // Record transaction
+            let transaction = WalletTransaction(
+                type: .received,
+                amount: amount,
+                description: "Lightning payment received",
+                timestamp: Date(),
+                mint: primaryMint,
+                invoice: nil,
+                fee: 0,
+                status: .completed,
+                direction: .incoming
+            )
+            await MainActor.run {
+                recentTransactions.insert(transaction, at: 0)
             }
+            // Update balance
+            await updateAllBalances()
+            // Store tokens
+            await storeTokens()
+            print("💰 Invoice paid: \(amount) sats received")
+            return
         }
         // Invoice expired
-        await MainActor.run {
+        _ = await MainActor.run { @MainActor in
             pendingInvoices.removeValue(forKey: quote)
         }
     }
@@ -2973,17 +2866,18 @@ class OlasWalletManager: ObservableObject {
             // Monitor for wallet events
             // In a real implementation, this would monitor proper wallet event kinds
             // For now, we'll just monitor for zap receipts
-            guard let userPubkey = ndk.signer?.pubkey else { return }
+            guard let userPubkey = try? await ndk.signer?.pubkey else { return }
             let filter = NDKFilter(
                 authors: [userPubkey],
                 kinds: [EventKind.zap]
             )
-            do {
-                for await event in await ndk.observe(filters: [filter]) {
-                    await handleWalletEvent(event)
-                }
-            } catch {
-                print("💰 Error monitoring wallet events: \(error)")
+            let dataSource = ndk.observe(
+                filter: filter,
+                maxAge: 0,
+                cachePolicy: .cacheWithNetwork
+            )
+            for await event in dataSource.events {
+                await handleWalletEvent(event)
             }
         }
     }
@@ -2994,7 +2888,7 @@ class OlasWalletManager: ObservableObject {
         case EventKind.zap:
             // Handle zap receipt
             // In a real implementation, parse the zap receipt to update balance
-            await updateBalance()
+            await updateAllBalances()
         default:
             break
         }
@@ -3162,6 +3056,35 @@ private struct NWCResult: Codable {
 import SwiftUI
 // MARK: - Olas Utilities
 // This file contains utility functions and extensions specific to Olas
+extension String {
+    func nsecToHex() -> String? {
+        guard self.hasPrefix("nsec1") else { return nil }
+        let bech32String = String(self.dropFirst(5))
+        // Bech32 character set
+        let charset = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+        // Convert from bech32
+        var data: [UInt8] = []
+        for char in bech32String {
+            guard let index = charset.firstIndex(of: char) else { return nil }
+            let value = charset.distance(from: charset.startIndex, to: index)
+            data.append(UInt8(value))
+        }
+        // Convert 5-bit groups to 8-bit groups
+        var result: [UInt8] = []
+        var buffer = 0
+        var bits = 0
+        for value in data {
+            buffer = (buffer << 5) | Int(value)
+            bits += 5
+            while bits >= 8 {
+                bits -= 8
+                result.append(UInt8((buffer >> bits) & 0xFF))
+            }
+        }
+        // Convert to hex string
+        return result.map { String(format: "%02x", $0) }.joined()
+    }
+}
 </file>
 
 <file path="Olas/Views/Analytics/AnalyticsDashboardView.swift">
@@ -8169,1042 +8092,12 @@ struct TrendingHashtagPill: View {
 }
 </file>
 
-<file path="Olas/Views/Messages/ConversationView.swift">
-import SwiftUI
-import NDKSwift
-import PhotosUI
-struct ConversationView: View {
-    let conversation: DMConversation
-    @ObservedObject var dmManager: DirectMessagesManager
-    @Environment(NostrManager.self) private var nostrManager
-    @Environment(\.dismiss) private var dismiss
-    @State private var messageText = ""
-    @State private var isTyping = false
-    @State private var showImagePicker = false
-    @State private var selectedImage: PhotosPickerItem?
-    @State private var attachedImageData: Data?
-    @State private var attachedImageURL: String?
-    @State private var showingActionSheet = false
-    @State private var selectedMessage: DirectMessage?
-    @State private var keyboardHeight: CGFloat = 0
-    @FocusState private var isMessageFieldFocused: Bool
-    var body: some View {
-        VStack(spacing: 0) {
-            // Messages list
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(spacing: OlasDesign.Spacing.sm) {
-                        ForEach(dmManager.currentMessages) { message in
-                            MessageBubble(
-                                message: message,
-                                isFromMe: message.senderPubkey == nostrManager.currentUserPubkey,
-                                onLongPress: {
-                                    selectedMessage = message
-                                    showingActionSheet = true
-                                    OlasDesign.Haptic.selection()
-                                }
-                            )
-                            .id(message.id)
-                            .transition(.asymmetric(
-                                insertion: .scale.combined(with: .opacity),
-                                removal: .scale.combined(with: .opacity)
-                            ))
-                        }
-                    }
-                    .padding()
-                }
-                .onAppear {
-                    scrollToBottom(proxy: proxy)
-                }
-                .onChange(of: dmManager.currentMessages.count) { _, _ in
-                    withAnimation {
-                        scrollToBottom(proxy: proxy)
-                    }
-                }
-            }
-            // Input area
-            messageInputArea
-        }
-        .navigationTitle(conversation.displayName)
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                HStack(spacing: 16) {
-                    // Video call button
-                    Button(action: {
-                        OlasDesign.Haptic.selection()
-                        // TODO: Implement video call
-                    }) {
-                        Image(systemName: "video.fill")
-                            .foregroundColor(OlasDesign.Colors.primary)
-                    }
-                    // Audio call button
-                    Button(action: {
-                        OlasDesign.Haptic.selection()
-                        // TODO: Implement audio call
-                    }) {
-                        Image(systemName: "phone.fill")
-                            .foregroundColor(OlasDesign.Colors.primary)
-                    }
-                }
-            }
-        }
-        .task {
-            await dmManager.loadConversation(with: conversation.otherParticipantPubkey)
-        }
-        .confirmationDialog("Message Options", isPresented: $showingActionSheet, presenting: selectedMessage) { message in
-            Button("Copy") {
-                UIPasteboard.general.string = message.content
-                OlasDesign.Haptic.success()
-            }
-            if message.senderPubkey == nostrManager.currentUserPubkey {
-                Button("Delete", role: .destructive) {
-                    Task {
-                        try? await dmManager.deleteMessage(message.id)
-                    }
-                }
-            }
-            Button("Cancel", role: .cancel) {}
-        }
-        .photosPicker(
-            isPresented: $showImagePicker,
-            selection: $selectedImage,
-            matching: .images
-        )
-        .onChange(of: selectedImage) { _, newValue in
-            Task {
-                if let data = try? await newValue?.loadTransferable(type: Data.self) {
-                    attachedImageData = data
-                    // Upload to Blossom
-                    await uploadImage(data)
-                }
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
-            if let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
-                withAnimation(.easeOut(duration: 0.25)) {
-                    keyboardHeight = keyboardFrame.height
-                }
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-            withAnimation(.easeOut(duration: 0.25)) {
-                keyboardHeight = 0
-            }
-        }
-    }
-    private var messageInputArea: some View {
-        VStack(spacing: 0) {
-            // Attached image preview
-            if let imageData = attachedImageData,
-               let uiImage = UIImage(data: imageData) {
-                HStack {
-                    Image(uiImage: uiImage)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 80, height: 80)
-                        .clipped()
-                        .cornerRadius(12)
-                        .overlay(
-                            Button(action: {
-                                attachedImageData = nil
-                                attachedImageURL = nil
-                            }) {
-                                Image(systemName: "xmark.circle.fill")
-                                    .font(.title3)
-                                    .foregroundStyle(.white, Color.black.opacity(0.6))
-                            }
-                            .offset(x: -8, y: -8),
-                            alignment: .topTrailing
-                        )
-                    Spacer()
-                }
-                .padding(.horizontal)
-                .padding(.vertical, 8)
-            }
-            Divider()
-            HStack(spacing: OlasDesign.Spacing.sm) {
-                // Attachment button
-                Button(action: {
-                    showImagePicker = true
-                    OlasDesign.Haptic.selection()
-                }) {
-                    Image(systemName: "photo")
-                        .font(.title3)
-                        .foregroundColor(OlasDesign.Colors.primary)
-                }
-                // Message field
-                HStack {
-                    TextField("Message", text: $messageText, axis: .vertical)
-                        .textFieldStyle(PlainTextFieldStyle())
-                        .font(OlasDesign.Typography.body)
-                        .foregroundColor(OlasDesign.Colors.text)
-                        .focused($isMessageFieldFocused)
-                        .onChange(of: messageText) { _, newValue in
-                            isTyping = !newValue.isEmpty
-                        }
-                        .onSubmit {
-                            if !messageText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                sendMessage()
-                            }
-                        }
-                    if isTyping {
-                        Button(action: sendMessage) {
-                            Image(systemName: "arrow.up.circle.fill")
-                                .font(.title2)
-                                .foregroundColor(OlasDesign.Colors.primary)
-                        }
-                        .transition(.scale.combined(with: .opacity))
-                    }
-                }
-                .padding(.horizontal, OlasDesign.Spacing.md)
-                .padding(.vertical, OlasDesign.Spacing.sm)
-                .background(
-                    RoundedRectangle(cornerRadius: 20)
-                        .fill(OlasDesign.Colors.surface)
-                )
-            }
-            .padding(.horizontal)
-            .padding(.vertical, OlasDesign.Spacing.sm)
-        }
-        .background(OlasDesign.Colors.background.opacity(0.95))
-    }
-    private func sendMessage() {
-        let trimmedMessage = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedMessage.isEmpty || attachedImageURL != nil else { return }
-        OlasDesign.Haptic.selection()
-        Task {
-            do {
-                var mediaURLs: [String] = []
-                if let imageURL = attachedImageURL {
-                    mediaURLs.append(imageURL)
-                }
-                try await dmManager.sendMessage(
-                    to: conversation.otherParticipantPubkey,
-                    content: trimmedMessage,
-                    mediaURLs: mediaURLs
-                )
-                // Clear input
-                messageText = ""
-                attachedImageData = nil
-                attachedImageURL = nil
-                isMessageFieldFocused = false
-            } catch {
-                print("Failed to send message: \(error)")
-                OlasDesign.Haptic.error()
-            }
-        }
-    }
-    private func uploadImage(_ data: Data) async {
-        // Upload to Blossom
-        do {
-            let urls = try await nostrManager.blossomManager.uploadData(
-                data,
-                mimeType: "image/jpeg"
-            )
-            if let url = urls.first {
-                attachedImageURL = url
-            }
-        } catch {
-            print("Failed to upload image: \(error)")
-            attachedImageData = nil
-        }
-    }
-    private func scrollToBottom(proxy: ScrollViewProxy) {
-        if let lastMessage = dmManager.currentMessages.last {
-            proxy.scrollTo(lastMessage.id, anchor: .bottom)
-        }
-    }
-}
-struct MessageBubble: View {
-    let message: DirectMessage
-    let isFromMe: Bool
-    let onLongPress: () -> Void
-    @State private var showFullImage = false
-    @State private var selectedImageURL: String?
-    var body: some View {
-        HStack {
-            if isFromMe { Spacer() }
-            VStack(alignment: isFromMe ? .trailing : .leading, spacing: 4) {
-                // Media attachments
-                if !message.mediaAttachments.isEmpty {
-                    ForEach(message.mediaAttachments) { attachment in
-                        if attachment.type == .image {
-                            AsyncImage(url: URL(string: attachment.url)) { image in
-                                image
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(maxWidth: 250, maxHeight: 300)
-                                    .clipped()
-                                    .cornerRadius(16)
-                                    .onTapGesture {
-                                        selectedImageURL = attachment.url
-                                        showFullImage = true
-                                        OlasDesign.Haptic.selection()
-                                    }
-                            } placeholder: {
-                                RoundedRectangle(cornerRadius: 16)
-                                    .fill(Color.gray.opacity(0.3))
-                                    .frame(width: 250, height: 200)
-                                    .overlay(
-                                        ProgressView()
-                                    )
-                            }
-                        }
-                    }
-                }
-                // Text content
-                if !message.content.isEmpty {
-                    Text(message.content)
-                        .font(OlasDesign.Typography.body)
-                        .foregroundColor(isFromMe ? .white : OlasDesign.Colors.text)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(
-                            RoundedRectangle(cornerRadius: 20)
-                                .fill(
-                                    isFromMe ?
-                                    LinearGradient(
-                                        colors: OlasDesign.Colors.primaryGradient,
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ) :
-                                    LinearGradient(
-                                        colors: [OlasDesign.Colors.surface],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                        )
-                }
-                // Timestamp
-                Text(formatTime(message.timestamp))
-                    .font(.caption2)
-                    .foregroundColor(OlasDesign.Colors.textTertiary)
-                    .padding(.horizontal, 4)
-            }
-            .contextMenu {
-                Button(action: {
-                    UIPasteboard.general.string = message.content
-                    OlasDesign.Haptic.success()
-                }) {
-                    Label("Copy", systemImage: "doc.on.doc")
-                }
-                if isFromMe {
-                    Button(role: .destructive, action: onLongPress) {
-                        Label("Delete", systemImage: "trash")
-                    }
-                }
-            }
-            if !isFromMe { Spacer() }
-        }
-        .padding(.horizontal, 4)
-        .fullScreenCover(isPresented: $showFullImage) {
-            if let imageURL = selectedImageURL {
-                FullScreenImageViewer(imageURL: imageURL)
-            }
-        }
-    }
-    private func formatTime(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        return formatter.string(from: date)
-    }
-}
-struct FullScreenImageViewer: View {
-    let imageURL: String
-    @Environment(\.dismiss) private var dismiss
-    @State private var scale: CGFloat = 1.0
-    @State private var offset: CGSize = .zero
-    @State private var lastScale: CGFloat = 1.0
-    var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            AsyncImage(url: URL(string: imageURL)) { image in
-                image
-                    .resizable()
-                    .scaledToFit()
-                    .scaleEffect(scale)
-                    .offset(offset)
-                    .gesture(
-                        MagnificationGesture()
-                            .onChanged { value in
-                                scale = lastScale * value
-                            }
-                            .onEnded { value in
-                                lastScale = scale
-                                // Limit zoom
-                                withAnimation(.spring()) {
-                                    if scale < 1 {
-                                        scale = 1
-                                        lastScale = 1
-                                        offset = .zero
-                                    } else if scale > 5 {
-                                        scale = 5
-                                        lastScale = 5
-                                    }
-                                }
-                            }
-                    )
-                    .simultaneousGesture(
-                        DragGesture()
-                            .onChanged { value in
-                                offset = CGSize(
-                                    width: value.translation.width,
-                                    height: value.translation.height
-                                )
-                            }
-                            .onEnded { _ in
-                                withAnimation(.spring()) {
-                                    if scale <= 1 {
-                                        offset = .zero
-                                    }
-                                }
-                            }
-                    )
-                    .onTapGesture(count: 2) {
-                        withAnimation(.spring()) {
-                            if scale > 1 {
-                                scale = 1
-                                lastScale = 1
-                                offset = .zero
-                            } else {
-                                scale = 2
-                                lastScale = 2
-                            }
-                        }
-                    }
-            } placeholder: {
-                ProgressView()
-                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                    .scaleEffect(1.5)
-            }
-            VStack {
-                HStack {
-                    Spacer()
-                    Button(action: { dismiss() }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.title)
-                            .foregroundStyle(.white, Color.black.opacity(0.6))
-                    }
-                    .padding()
-                }
-                Spacer()
-            }
-        }
-    }
-}
-</file>
-
-<file path="Olas/Views/Messages/MessagesListView.swift">
-import SwiftUI
-import NDKSwift
-struct MessagesListView: View {
-    @Environment(NostrManager.self) private var nostrManager
-    @EnvironmentObject var appState: AppState
-    @StateObject private var dmManager: DirectMessagesManager
-    @State private var searchText = ""
-    @State private var showNewMessage = false
-    @State private var selectedConversation: DMConversation?
-    init(nostrManager: NostrManager) {
-        self._dmManager = StateObject(wrappedValue: DirectMessagesManager(nostrManager: nostrManager))
-    }
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                // Gradient background
-                LinearGradient(
-                    colors: [
-                        OlasDesign.Colors.background,
-                        OlasDesign.Colors.background.opacity(0.95)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-                if dmManager.conversations.isEmpty && !dmManager.isLoading {
-                    emptyStateView
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(filteredConversations) { conversation in
-                                ConversationRow(
-                                    conversation: conversation,
-                                    onTap: {
-                                        selectedConversation = conversation
-                                    }
-                                )
-                                .transition(.asymmetric(
-                                    insertion: .push(from: .trailing).combined(with: .opacity),
-                                    removal: .push(from: .leading).combined(with: .opacity)
-                                ))
-                                if conversation.id != filteredConversations.last?.id {
-                                    Divider()
-                                        .padding(.leading, 80)
-                                }
-                            }
-                        }
-                        .padding(.vertical, 8)
-                    }
-                    .refreshable {
-                        await refreshMessages()
-                    }
-                }
-                // Floating new message button
-                VStack {
-                    Spacer()
-                    HStack {
-                        Spacer()
-                        Button(action: {
-                            showNewMessage = true
-                            OlasDesign.Haptic.selection()
-                        }) {
-                            Image(systemName: "square.and.pencil")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                                .frame(width: 56, height: 56)
-                                .background(
-                                    LinearGradient(
-                                        colors: OlasDesign.Colors.primaryGradient,
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .clipShape(Circle())
-                                .shadow(color: OlasDesign.Colors.primary.opacity(0.3), radius: 10, y: 5)
-                        }
-                        .padding()
-                    }
-                }
-            }
-            .navigationTitle("Messages")
-            .navigationBarTitleDisplayMode(.large)
-            .searchable(text: $searchText, prompt: "Search conversations")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    if dmManager.unreadCount > 0 {
-                        Text("\(dmManager.unreadCount)")
-                            .font(.caption)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(
-                                Capsule()
-                                    .fill(OlasDesign.Colors.error)
-                            )
-                    }
-                }
-            }
-            .task {
-                dmManager.startObservingMessages()
-            }
-            .sheet(isPresented: $showNewMessage) {
-                NewMessageView(dmManager: dmManager)
-                    .environment(nostrManager)
-            }
-            .navigationDestination(item: $selectedConversation) { conversation in
-                ConversationView(
-                    conversation: conversation,
-                    dmManager: dmManager
-                )
-                .environment(nostrManager)
-            }
-        }
-    }
-    private var filteredConversations: [DMConversation] {
-        if searchText.isEmpty {
-            return dmManager.conversations
-        }
-        return dmManager.conversations.filter { conversation in
-            conversation.displayName.localizedCaseInsensitiveContains(searchText) ||
-            conversation.lastMessagePreview.localizedCaseInsensitiveContains(searchText)
-        }
-    }
-    private var emptyStateView: some View {
-        VStack(spacing: OlasDesign.Spacing.xl) {
-            Spacer()
-            Image(systemName: "bubble.left.and.bubble.right")
-                .font(.system(size: 80))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: OlasDesign.Colors.primaryGradient,
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-            Text("No Conversations")
-                .font(OlasDesign.Typography.title)
-                .foregroundColor(OlasDesign.Colors.text)
-            Text("Start a conversation with someone")
-                .font(OlasDesign.Typography.body)
-                .foregroundColor(OlasDesign.Colors.textSecondary)
-                .multilineTextAlignment(.center)
-            Button(action: {
-                showNewMessage = true
-                OlasDesign.Haptic.selection()
-            }) {
-                HStack {
-                    Image(systemName: "plus.circle.fill")
-                    Text("New Message")
-                }
-                .font(OlasDesign.Typography.bodyMedium)
-                .foregroundColor(.white)
-                .padding(.horizontal, OlasDesign.Spacing.lg)
-                .padding(.vertical, OlasDesign.Spacing.md)
-                .background(
-                    LinearGradient(
-                        colors: OlasDesign.Colors.primaryGradient,
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .clipShape(Capsule())
-            }
-            Spacer()
-            Spacer()
-        }
-        .padding(.horizontal, OlasDesign.Spacing.xl)
-    }
-    private func refreshMessages() async {
-        OlasDesign.Haptic.selection()
-        dmManager.startObservingMessages()
-        // Simulate refresh delay
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
-    }
-}
-struct ConversationRow: View {
-    let conversation: DMConversation
-    let onTap: () -> Void
-    @State private var isPressed = false
-    var body: some View {
-        Button(action: {
-            OlasDesign.Haptic.selection()
-            onTap()
-        }) {
-            HStack(spacing: OlasDesign.Spacing.md) {
-                // Avatar
-                OlasAvatar(
-                    url: conversation.otherParticipantProfile?.picture,
-                    size: 56,
-                    pubkey: conversation.otherParticipantPubkey
-                )
-                .overlay(
-                    // Online indicator
-                    Circle()
-                        .fill(Color.green)
-                        .frame(width: 14, height: 14)
-                        .overlay(
-                            Circle()
-                                .stroke(OlasDesign.Colors.background, lineWidth: 2)
-                        )
-                        .offset(x: 20, y: 20)
-                        .opacity(Bool.random() ? 1 : 0) // Mock online status
-                )
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(conversation.displayName)
-                            .font(OlasDesign.Typography.bodyMedium)
-                            .foregroundColor(OlasDesign.Colors.text)
-                            .lineLimit(1)
-                        Spacer()
-                        if let timestamp = conversation.lastMessage?.timestamp {
-                            Text(formatRelativeTime(timestamp))
-                                .font(OlasDesign.Typography.caption)
-                                .foregroundColor(OlasDesign.Colors.textTertiary)
-                        }
-                    }
-                    HStack {
-                        Text(conversation.lastMessagePreview)
-                            .font(OlasDesign.Typography.body)
-                            .foregroundColor(OlasDesign.Colors.textSecondary)
-                            .lineLimit(2)
-                        Spacer()
-                        if conversation.unreadCount > 0 {
-                            Text("\(conversation.unreadCount)")
-                                .font(.caption)
-                                .foregroundColor(.white)
-                                .frame(minWidth: 20)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(
-                                    Capsule()
-                                        .fill(OlasDesign.Colors.primary)
-                                )
-                        }
-                    }
-                }
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(OlasDesign.Colors.textTertiary)
-            }
-            .padding(.horizontal, OlasDesign.Spacing.md)
-            .padding(.vertical, OlasDesign.Spacing.sm)
-            .background(
-                conversation.unreadCount > 0 ?
-                OlasDesign.Colors.primary.opacity(0.05) :
-                Color.clear
-            )
-        }
-        .buttonStyle(PlainButtonStyle())
-        .scaleEffect(isPressed ? 0.98 : 1.0)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isPressed)
-        .onLongPressGesture(
-            minimumDuration: 0.1,
-            maximumDistance: .infinity,
-            pressing: { pressing in
-                isPressed = pressing
-            },
-            perform: {}
-        )
-    }
-    private func formatRelativeTime(_ date: Date) -> String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: date, relativeTo: Date())
-    }
-}
-</file>
-
-<file path="Olas/Views/Messages/NewMessageView.swift">
-import SwiftUI
-import NDKSwift
-struct NewMessageView: View {
-    @ObservedObject var dmManager: DirectMessagesManager
-    @Environment(NostrManager.self) private var nostrManager
-    @Environment(\.dismiss) private var dismiss
-    @State private var searchText = ""
-    @State private var selectedUser: UserSearchResult?
-    @State private var searchResults: [UserSearchResult] = []
-    @State private var isSearching = false
-    @State private var recentContacts: [UserSearchResult] = []
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                OlasDesign.Colors.background
-                    .ignoresSafeArea()
-                VStack(spacing: 0) {
-                    // Search bar
-                    searchBar
-                    Divider()
-                    if isSearching {
-                        loadingView
-                    } else if !searchText.isEmpty && searchResults.isEmpty {
-                        noResultsView
-                    } else if searchText.isEmpty {
-                        recentContactsView
-                    } else {
-                        searchResultsView
-                    }
-                }
-            }
-            .navigationTitle("New Message")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .foregroundColor(OlasDesign.Colors.textSecondary)
-                }
-            }
-            .task {
-                await loadRecentContacts()
-            }
-            .onChange(of: searchText) { _, newValue in
-                Task {
-                    await searchUsers(newValue)
-                }
-            }
-            .navigationDestination(item: $selectedUser) { user in
-                // Create or navigate to conversation
-                if let conversation = findExistingConversation(with: user.pubkey) {
-                    ConversationView(
-                        conversation: conversation,
-                        dmManager: dmManager
-                    )
-                    .environment(nostrManager)
-                } else {
-                    // Create new conversation view
-                    NewConversationView(
-                        recipient: user,
-                        dmManager: dmManager
-                    )
-                    .environment(nostrManager)
-                }
-            }
-        }
-    }
-    private var searchBar: some View {
-        HStack(spacing: OlasDesign.Spacing.sm) {
-            Image(systemName: "magnifyingglass")
-                .foregroundColor(OlasDesign.Colors.textSecondary)
-            TextField("Search by name or npub", text: $searchText)
-                .textFieldStyle(PlainTextFieldStyle())
-                .font(OlasDesign.Typography.body)
-                .foregroundColor(OlasDesign.Colors.text)
-                .autocapitalization(.none)
-                .disableAutocorrection(true)
-            if !searchText.isEmpty {
-                Button(action: {
-                    searchText = ""
-                }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundColor(OlasDesign.Colors.textSecondary)
-                }
-            }
-        }
-        .padding()
-        .background(OlasDesign.Colors.surface)
-    }
-    private var recentContactsView: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: OlasDesign.Spacing.md) {
-                Text("Recent")
-                    .font(OlasDesign.Typography.caption)
-                    .foregroundColor(OlasDesign.Colors.textSecondary)
-                    .padding(.horizontal)
-                    .padding(.top)
-                LazyVStack(spacing: 0) {
-                    ForEach(recentContacts) { contact in
-                        UserRow(user: contact) {
-                            selectedUser = contact
-                        }
-                        if contact.id != recentContacts.last?.id {
-                            Divider()
-                                .padding(.leading, 72)
-                        }
-                    }
-                }
-            }
-        }
-    }
-    private var searchResultsView: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                ForEach(searchResults) { user in
-                    UserRow(user: user) {
-                        selectedUser = user
-                    }
-                    if user.id != searchResults.last?.id {
-                        Divider()
-                            .padding(.leading, 72)
-                    }
-                }
-            }
-        }
-    }
-    private var loadingView: some View {
-        VStack(spacing: OlasDesign.Spacing.lg) {
-            Spacer()
-            ProgressView()
-                .progressViewStyle(CircularProgressViewStyle(tint: OlasDesign.Colors.primary))
-                .scaleEffect(1.5)
-            Text("Searching...")
-                .font(OlasDesign.Typography.body)
-                .foregroundColor(OlasDesign.Colors.textSecondary)
-            Spacer()
-        }
-    }
-    private var noResultsView: some View {
-        VStack(spacing: OlasDesign.Spacing.lg) {
-            Spacer()
-            Image(systemName: "magnifyingglass")
-                .font(.system(size: 60))
-                .foregroundColor(OlasDesign.Colors.textTertiary)
-            Text("No users found")
-                .font(OlasDesign.Typography.body)
-                .foregroundColor(OlasDesign.Colors.textSecondary)
-            Spacer()
-        }
-    }
-    private func loadRecentContacts() async {
-        // Load recent contacts from existing conversations
-        var contacts: [UserSearchResult] = []
-        for conversation in dmManager.conversations.prefix(10) {
-            let contact = UserSearchResult(
-                pubkey: conversation.otherParticipantPubkey,
-                profile: conversation.otherParticipantProfile
-            )
-            contacts.append(contact)
-        }
-        recentContacts = contacts
-    }
-    private func searchUsers(_ query: String) async {
-        guard !query.isEmpty else {
-            searchResults = []
-            return
-        }
-        isSearching = true
-        // If it's an npub, decode it
-        if query.hasPrefix("npub") {
-            // TODO: Decode npub to hex pubkey
-            isSearching = false
-            return
-        }
-        // Search by name using NDK
-        guard let ndk = nostrManager.ndk else {
-            isSearching = false
-            return
-        }
-        // Create filter for user metadata
-        let filter = NDKFilter(
-            kinds: [0], // User metadata
-            limit: 20
-        )
-        let dataSource = ndk.dataSource(filter: filter)
-        var results: [UserSearchResult] = []
-        for await event in dataSource.events {
-            guard let profileData = event.content.data(using: .utf8),
-                  let profile = try? JSONDecoder().decode(NDKUserProfile.self, from: profileData) else {
-                continue
-            }
-            // Check if name matches search
-            let searchLower = query.lowercased()
-            if let name = profile.name?.lowercased(), name.contains(searchLower) ||
-               profile.displayName?.lowercased().contains(searchLower) == true {
-                let result = UserSearchResult(
-                    pubkey: event.pubkey,
-                    profile: profile
-                )
-                results.append(result)
-                if results.count >= 10 {
-                    break
-                }
-            }
-        }
-        searchResults = results
-        isSearching = false
-    }
-    private func findExistingConversation(with pubkey: String) -> DMConversation? {
-        dmManager.conversations.first { $0.otherParticipantPubkey == pubkey }
-    }
-}
-struct UserRow: View {
-    let user: UserSearchResult
-    let onTap: () -> Void
-    var body: some View {
-        Button(action: {
-            OlasDesign.Haptic.selection()
-            onTap()
-        }) {
-            HStack(spacing: OlasDesign.Spacing.md) {
-                OlasAvatar(
-                    url: user.profile?.picture,
-                    size: 48,
-                    pubkey: user.pubkey
-                )
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(user.displayName)
-                        .font(OlasDesign.Typography.bodyMedium)
-                        .foregroundColor(OlasDesign.Colors.text)
-                        .lineLimit(1)
-                    if let name = user.profile?.name {
-                        Text("@\(name)")
-                            .font(OlasDesign.Typography.caption)
-                            .foregroundColor(OlasDesign.Colors.textSecondary)
-                            .lineLimit(1)
-                    }
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(OlasDesign.Colors.textTertiary)
-            }
-            .padding(.horizontal)
-            .padding(.vertical, OlasDesign.Spacing.sm)
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-}
-struct UserSearchResult: Identifiable {
-    let id = UUID()
-    let pubkey: String
-    let profile: NDKUserProfile?
-    var displayName: String {
-        profile?.displayName ?? profile?.name ?? String(pubkey.prefix(8)) + "..."
-    }
-}
-struct NewConversationView: View {
-    let recipient: UserSearchResult
-    @ObservedObject var dmManager: DirectMessagesManager
-    @Environment(NostrManager.self) private var nostrManager
-    @Environment(\.dismiss) private var dismiss
-    @State private var messageText = ""
-    @FocusState private var isMessageFieldFocused: Bool
-    var body: some View {
-        VStack(spacing: 0) {
-            // Empty conversation placeholder
-            Spacer()
-            VStack(spacing: OlasDesign.Spacing.md) {
-                OlasAvatar(
-                    url: recipient.profile?.picture,
-                    size: 80,
-                    pubkey: recipient.pubkey
-                )
-                Text(recipient.displayName)
-                    .font(OlasDesign.Typography.title2)
-                    .foregroundColor(OlasDesign.Colors.text)
-                Text("Start a conversation")
-                    .font(OlasDesign.Typography.body)
-                    .foregroundColor(OlasDesign.Colors.textSecondary)
-            }
-            Spacer()
-            // Message input
-            HStack(spacing: OlasDesign.Spacing.sm) {
-                TextField("Say hi 👋", text: $messageText)
-                    .textFieldStyle(PlainTextFieldStyle())
-                    .font(OlasDesign.Typography.body)
-                    .foregroundColor(OlasDesign.Colors.text)
-                    .focused($isMessageFieldFocused)
-                    .padding(.horizontal, OlasDesign.Spacing.md)
-                    .padding(.vertical, OlasDesign.Spacing.sm)
-                    .background(
-                        RoundedRectangle(cornerRadius: 20)
-                            .fill(OlasDesign.Colors.surface)
-                    )
-                if !messageText.isEmpty {
-                    Button(action: sendFirstMessage) {
-                        Image(systemName: "arrow.up.circle.fill")
-                            .font(.title2)
-                            .foregroundColor(OlasDesign.Colors.primary)
-                    }
-                    .transition(.scale.combined(with: .opacity))
-                }
-            }
-            .padding()
-        }
-        .navigationTitle(recipient.displayName)
-        .navigationBarTitleDisplayMode(.inline)
-        .onAppear {
-            isMessageFieldFocused = true
-        }
-    }
-    private func sendFirstMessage() {
-        let trimmedMessage = messageText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedMessage.isEmpty else { return }
-        OlasDesign.Haptic.selection()
-        Task {
-            do {
-                try await dmManager.sendMessage(
-                    to: recipient.pubkey,
-                    content: trimmedMessage
-                )
-                // Navigate back to main messages view
-                dismiss()
-            } catch {
-                print("Failed to send message: \(error)")
-                OlasDesign.Haptic.error()
-            }
-        }
-    }
-}
-</file>
-
 <file path="Olas/Views/Onboarding/OnboardingView.swift">
 import SwiftUI
 struct OnboardingView: View {
     @Environment(NostrManager.self) private var nostrManager
     @EnvironmentObject var appState: AppState
+    @Environment(\.dismiss) var dismiss
     @State private var currentPage = 0
     @State private var animateContent = false
     var body: some View {
@@ -9221,10 +8114,11 @@ struct OnboardingView: View {
                     .tag(2)
                 SecurityEducationView()
                     .tag(3)
+                    .environmentObject(appState)
+                    .environment(nostrManager)
             }
             #if os(iOS)
-            .tabViewStyle(.page)
-            .indexViewStyle(.page(backgroundDisplayMode: .always))
+            .tabViewStyle(.page(indexDisplayMode: .never))
             #endif
             // Skip button
             if currentPage < 2 {
@@ -9471,6 +8365,7 @@ struct SurroundingNode: View {
 struct KeyGenerationView: View {
     @Environment(NostrManager.self) private var nostrManager
     @EnvironmentObject var appState: AppState
+    @Environment(\.dismiss) var dismiss
     @State private var animate = false
     @State private var particles: [Particle] = []
     @State private var keyGenerated = false
@@ -9550,19 +8445,10 @@ struct KeyGenerationView: View {
             }
             Spacer()
             if keyGenerated {
-                VStack(spacing: OlasDesign.Spacing.md) {
-                    Button {
-                        showMnemonic = true
-                        #if os(iOS)
-                        OlasDesign.Haptic.impact(.medium)
-                        #else
-                        OlasDesign.Haptic.impact(0)
-                        #endif
-                    } label: {
-                        HStack {
-                            Image(systemName: "lock.shield.fill")
-                            Text("Secure My Account")
-                        }
+                Button {
+                    completeOnboarding()
+                } label: {
+                    Text("Continue")
                         .font(OlasDesign.Typography.bodyBold)
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
@@ -9575,14 +8461,6 @@ struct KeyGenerationView: View {
                             )
                         )
                         .clipShape(RoundedRectangle(cornerRadius: 16))
-                    }
-                    Button {
-                        completeOnboarding()
-                    } label: {
-                        Text("I'll do this later")
-                            .font(OlasDesign.Typography.caption)
-                            .foregroundStyle(.white.opacity(0.6))
-                    }
                 }
                 .padding(.horizontal, OlasDesign.Spacing.xl)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -9596,11 +8474,6 @@ struct KeyGenerationView: View {
                 }
             }
             .padding(.bottom, 50)
-        }
-        .sheet(isPresented: $showMnemonic) {
-            MnemonicBackupView(privateKey: privateKey) {
-                completeOnboarding()
-            }
         }
     }
     private func startParticleAnimation() {
@@ -9663,6 +8536,10 @@ struct KeyGenerationView: View {
                     displayName: "Olas User",
                     about: "Visual storyteller on Nostr 📸"
                 )
+                UserDefaults.standard.set(true, forKey: "hasSeenOnboarding")
+                await MainActor.run {
+                    dismiss()
+                }
             } catch {
                 print("Failed to create account: \(error)")
             }
@@ -9671,6 +8548,9 @@ struct KeyGenerationView: View {
 }
 // MARK: - Security Education
 struct SecurityEducationView: View {
+    @Environment(NostrManager.self) private var nostrManager
+    @EnvironmentObject var appState: AppState
+    @Environment(\.dismiss) var dismiss
     @State private var animate = false
     @State private var lockAnimation = false
     var body: some View {
@@ -9724,6 +8604,25 @@ struct SecurityEducationView: View {
             .offset(y: animate ? 0 : 20)
             .animation(.easeOut(duration: 0.8).delay(0.5), value: animate)
             Spacer()
+            Button {
+                completeOnboarding()
+            } label: {
+                Text("Get Started")
+                    .font(OlasDesign.Typography.bodyBold)
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(
+                        LinearGradient(
+                            colors: OlasDesign.Colors.primaryGradient,
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+            }
+            .padding(.horizontal, OlasDesign.Spacing.xl)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
             // Page indicator
             HStack(spacing: 8) {
                 ForEach(0..<4) { index in
@@ -9739,6 +8638,22 @@ struct SecurityEducationView: View {
             animate = true
             withAnimation(.easeInOut(duration: 0.8).delay(0.3)) {
                 lockAnimation = true
+            }
+        }
+    }
+    private func completeOnboarding() {
+        Task {
+            do {
+                _ = try await nostrManager.createNewAccount(
+                    displayName: "Olas User",
+                    about: "Visual storyteller on Nostr 📸"
+                )
+                UserDefaults.standard.set(true, forKey: "hasSeenOnboarding")
+                await MainActor.run {
+                    dismiss()
+                }
+            } catch {
+                print("Failed to create account: \(error)")
             }
         }
     }
@@ -9768,143 +8683,6 @@ struct SecurityPoint: View {
         .offset(x: animate ? 0 : -20)
         .onAppear {
             withAnimation(.spring(response: 0.5, dampingFraction: 0.8).delay(delay)) {
-                animate = true
-            }
-        }
-    }
-}
-// MARK: - Mnemonic Backup View
-struct MnemonicBackupView: View {
-    let privateKey: String
-    let onComplete: () -> Void
-    @State private var words: [String] = []
-    @State private var copiedWords = Set<Int>()
-    @State private var allCopied = false
-    var body: some View {
-        ZStack {
-            TimeBasedGradient()
-                .ignoresSafeArea()
-            VStack(spacing: OlasDesign.Spacing.xl) {
-                // Header
-                VStack(spacing: OlasDesign.Spacing.md) {
-                    Image(systemName: "doc.on.doc.fill")
-                        .font(.system(size: 48))
-                        .foregroundStyle(.white)
-                    Text("Save Your Recovery Words")
-                        .font(.system(size: 24, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white)
-                    Text("Write these down in order and keep them safe")
-                        .font(OlasDesign.Typography.body)
-                        .foregroundStyle(.white.opacity(0.8))
-                }
-                .padding(.top, OlasDesign.Spacing.xxxl)
-                // Mnemonic words grid
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: OlasDesign.Spacing.md) {
-                    ForEach(Array(words.enumerated()), id: \.offset) { index, word in
-                        MnemonicWordView(
-                            word: word,
-                            number: index + 1,
-                            isCopied: copiedWords.contains(index)
-                        ) {
-                            copiedWords.insert(index)
-                            #if os(iOS)
-                            OlasDesign.Haptic.impact(.light)
-                            #else
-                            OlasDesign.Haptic.impact(0)
-                            #endif
-                            if copiedWords.count == words.count {
-                                withAnimation(.spring()) {
-                                    allCopied = true
-                                }
-                                OlasDesign.Haptic.success()
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal, OlasDesign.Spacing.xl)
-                Spacer()
-                // Action buttons
-                VStack(spacing: OlasDesign.Spacing.md) {
-                    Button {
-                        #if os(iOS)
-                        OlasDesign.Haptic.impact(.medium)
-                        #else
-                        OlasDesign.Haptic.impact(0)
-                        #endif
-                        onComplete()
-                    } label: {
-                        Text(allCopied ? "I've Saved My Words" : "Copy All Words First")
-                        .font(OlasDesign.Typography.bodyBold)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 56)
-                        .background(
-                            LinearGradient(
-                                colors: allCopied ? OlasDesign.Colors.primaryGradient : [.gray],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                    }
-                    .disabled(!allCopied)
-                    Text("⚠️ Never share these words with anyone")
-                        .font(OlasDesign.Typography.caption)
-                        .foregroundStyle(.yellow)
-                }
-                .padding(.horizontal, OlasDesign.Spacing.xl)
-                .padding(.bottom, OlasDesign.Spacing.xxxl)
-            }
-        }
-        .onAppear {
-            generateMnemonic()
-        }
-    }
-    private func generateMnemonic() {
-        // In a real app, this would convert the private key to a proper BIP39 mnemonic
-        // For now, we'll generate sample words
-        words = [
-            "laptop", "ancient", "energy", "turtle",
-            "space", "panda", "sunset", "wisdom",
-            "ocean", "ladder", "crystal", "voyage"
-        ]
-    }
-}
-struct MnemonicWordView: View {
-    let word: String
-    let number: Int
-    let isCopied: Bool
-    let onTap: () -> Void
-    @State private var animate = false
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: OlasDesign.Spacing.sm) {
-                Text("\(number).")
-                    .font(OlasDesign.Typography.caption)
-                    .foregroundStyle(.white.opacity(0.6))
-                Text(word)
-                    .font(OlasDesign.Typography.bodyBold)
-                    .foregroundStyle(.white)
-                Spacer()
-                Image(systemName: isCopied ? "checkmark.circle.fill" : "doc.on.doc")
-                    .foregroundStyle(isCopied ? .green : .white.opacity(0.6))
-                    .animation(.spring(), value: isCopied)
-            }
-            .padding(.horizontal, OlasDesign.Spacing.md)
-            .padding(.vertical, OlasDesign.Spacing.sm)
-            .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(.white.opacity(isCopied ? 0.2 : 0.1))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(.white.opacity(0.2), lineWidth: 1)
-                    )
-            )
-        }
-        .scaleEffect(animate ? 1 : 0.8)
-        .opacity(animate ? 1 : 0)
-        .onAppear {
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.8).delay(Double(number) * 0.05)) {
                 animate = true
             }
         }
@@ -10138,38 +8916,30 @@ struct FollowUserRow: View {
                         await toggleFollow()
                     }
                 } label: {
-                    Group {
-                        if isLoading {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                                .frame(width: 90, height: 32)
-                        } else {
-                            Text(isFollowing ? "Following" : "Follow")
-                                .font(OlasDesign.Typography.captionBold)
-                                .foregroundStyle(isFollowing ? OlasDesign.Colors.text : .white)
-                                .frame(width: 90, height: 32)
-                                .background(
-                                    Group {
-                                        if isFollowing {
-                                            RoundedRectangle(cornerRadius: OlasDesign.CornerRadius.full)
-                                                .stroke(OlasDesign.Colors.divider, lineWidth: 1)
-                                                .fill(Color.clear)
-                                        } else {
-                                            RoundedRectangle(cornerRadius: OlasDesign.CornerRadius.full)
-                                                .fill(
-                                                    LinearGradient(
-                                                        colors: OlasDesign.Colors.primaryGradient,
-                                                        startPoint: .leading,
-                                                        endPoint: .trailing
-                                                    )
-                                                )
-                                        }
-                                    }
-                                )
-                        }
+                    if isLoading {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                            .frame(width: 90, height: 32)
+                    } else {
+                        Text(isFollowing ? "Following" : "Follow")
+                            .font(OlasDesign.Typography.caption.bold())
+                            .foregroundStyle(isFollowing ? OlasDesign.Colors.text : .white)
+                            .frame(width: 90, height: 32)
+                            .background(
+                                RoundedRectangle(cornerRadius: OlasDesign.CornerRadius.full)
+                                    .stroke(isFollowing ? OlasDesign.Colors.divider : Color.clear, lineWidth: 1)
+                                    .fill(isFollowing ? 
+                                          AnyShapeStyle(Color.clear) :
+                                          AnyShapeStyle(LinearGradient(
+                                              colors: OlasDesign.Colors.primaryGradient,
+                                              startPoint: .leading,
+                                              endPoint: .trailing
+                                          ))
+                                    )
+                            )
                     }
-                    .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isFollowing)
                 }
+                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isFollowing)
                 .disabled(isLoading)
             }
         }
@@ -10241,25 +9011,26 @@ class FollowersViewModel: ObservableObject {
             kinds: [3], // Contact list
             limit: 1000
         )
-        do {
-            let events = try await ndk.fetchEvents(filter: filter)
-            var followers: [FollowUser] = []
-            for event in events {
-                // Check if this contact list follows our target pubkey
-                let followsTarget = event.tags.contains { tag in
-                    tag.count >= 2 && tag[0] == "p" && tag[1] == pubkey
-                }
-                if followsTarget {
-                    let follower = FollowUser(pubkey: event.pubkey)
-                    followers.append(follower)
-                }
+        let dataSource = ndk.observe(
+            filter: filter,
+            maxAge: 0,
+            cachePolicy: .cacheWithNetwork
+        )
+        var followers: [FollowUser] = []
+        var processedPubkeys = Set<String>()
+        for await event in dataSource.events {
+            // Check if this contact list follows our target pubkey
+            let pTags = event.tags.filter { $0.count >= 2 && $0[0] == "p" }
+            let followsTarget = pTags.contains { $0[1] == pubkey }
+            if followsTarget && !processedPubkeys.contains(event.pubkey) {
+                processedPubkeys.insert(event.pubkey)
+                let follower = FollowUser(pubkey: event.pubkey)
+                followers.append(follower)
             }
-            self.users = followers
-            // Load profiles
-            await loadProfiles(ndk: ndk)
-        } catch {
-            print("Failed to load followers: \(error)")
         }
+        self.users = followers
+        // Load profiles
+        await loadProfiles(ndk: ndk)
     }
     private func loadFollowing(pubkey: String, ndk: NDK) async {
         // Load contact list for this user
@@ -10268,22 +9039,22 @@ class FollowersViewModel: ObservableObject {
             kinds: [3],
             limit: 1
         )
-        do {
-            let events = try await ndk.fetchEvents(filter: filter)
-            guard let contactList = events.first else {
-                self.users = []
-                return
-            }
+        let dataSource = ndk.observe(
+            filter: filter,
+            maxAge: 0,
+            cachePolicy: .cacheWithNetwork
+        )
+        for await event in dataSource.events {
             // Extract followed users from p tags
-            let following = contactList.tags.compactMap { tag -> FollowUser? in
+            let following = event.tags.compactMap { tag -> FollowUser? in
                 guard tag.count >= 2, tag[0] == "p" else { return nil }
                 return FollowUser(pubkey: tag[1])
             }
             self.users = following
             // Load profiles
             await loadProfiles(ndk: ndk)
-        } catch {
-            print("Failed to load following: \(error)")
+            // Break after first event since we only need one contact list
+            break
         }
     }
     private func loadProfiles(ndk: NDK) async {
@@ -12446,7 +11217,6 @@ struct ThemeSettingsView: View {
         }
     }
     private func getAccentGradient() -> [Color] {
-        let base = getAccentColor()
         switch accentColor {
         case "Purple": return [.purple, .pink]
         case "Blue": return [.blue, .cyan]
@@ -13398,8 +12168,8 @@ struct StoriesView: View {
         }
     }
     private func getUserInitial() -> String {
-        // Get current user's profile from storiesManager
-        if let currentUser = storiesManager?.currentUserProfile {
+        // Get current user's profile from nostrManager
+        if let currentUser = nostrManager.currentUserProfile {
             if let name = currentUser.name, !name.isEmpty {
                 return String(name.prefix(1)).uppercased()
             } else if let displayName = currentUser.displayName, !displayName.isEmpty {
@@ -15482,44 +14252,40 @@ struct WalletContactsScrollView: View {
     }
     private func loadContacts() async {
         guard let ndk = nostrManager.ndk,
-              let userPubkey = ndk.signer?.pubkey else { return }
+              let userPubkey = try? await ndk.signer?.pubkey else { return }
         // Load contact list (kind 3)
         let filter = NDKFilter(
             authors: [userPubkey],
-            kinds: [EventKind.contactList],
+            kinds: [EventKind.contacts],
             limit: 1
         )
-        do {
-            let dataSource = ndk.observe(
-                filter: filter,
-                maxAge: 3600,
-                cachePolicy: .cacheWithNetwork
-            )
-            for await event in dataSource.events {
-                // Extract pubkeys from tags
-                let pubkeys = event.tags
-                    .filter { $0.count >= 2 && $0[0] == "p" }
-                    .map { $0[1] }
-                    .prefix(10) // Limit to 10 for horizontal scroll
-                // Load profiles
-                var loadedContacts: [(pubkey: String, profile: NDKUserProfile?)] = []
-                for pubkey in pubkeys {
-                    if let profileManager = ndk.profileManager {
-                        let profile = await profileManager.fetchProfile(for: pubkey)
-                        loadedContacts.append((pubkey: pubkey, profile: profile))
+        let dataSource = ndk.observe(
+            filter: filter,
+            maxAge: 3600,
+            cachePolicy: .cacheWithNetwork
+        )
+        for await event in dataSource.events {
+            // Extract pubkeys from tags
+            let pTags = event.tags.filter { $0.count >= 2 && $0[0] == "p" }
+            let pubkeyList = pTags.map { $0[1] }
+            let pubkeys = Array(pubkeyList.prefix(10)) // Limit to 10 for horizontal scroll
+            // Load profiles
+            var loadedContacts: [(pubkey: String, profile: NDKUserProfile?)] = []
+            for pubkey in pubkeys {
+                if let profileManager = ndk.profileManager {
+                    var profile: NDKUserProfile?
+                    for await p in await profileManager.observe(for: pubkey, maxAge: 3600) {
+                        profile = p
+                        break
                     }
+                    loadedContacts.append((pubkey: pubkey, profile: profile))
                 }
-                await MainActor.run {
-                    self.contacts = loadedContacts
-                    self.isLoading = false
-                }
-                break // Only need first contact list event
             }
-        } catch {
-            print("Error loading contacts: \(error)")
             await MainActor.run {
+                self.contacts = loadedContacts
                 self.isLoading = false
             }
+            break // Only need first contact list event
         }
     }
 }
@@ -15745,7 +14511,7 @@ struct ModernTransactionRow: View {
         switch transaction.type {
         case .sent: return "arrow.up.circle.fill"
         case .received: return "arrow.down.circle.fill"
-        case .zapped: return "bolt.circle.fill"
+        case .zapped, .nutzapped: return "bolt.circle.fill"
         case .minted: return "plus.circle.fill"
         case .melted: return "minus.circle.fill"
         case .swapped: return "arrow.2.circlepath.circle.fill"
@@ -15755,7 +14521,7 @@ struct ModernTransactionRow: View {
         switch transaction.type {
         case .sent, .melted: return Color(hex: "F56565")
         case .received, .minted: return Color(hex: "48BB78")
-        case .zapped: return Color(hex: "805AD5")
+        case .zapped, .nutzapped: return Color(hex: "805AD5")
         case .swapped: return Color(hex: "4299E1")
         }
     }
@@ -16743,62 +15509,13 @@ struct NutZapView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Background gradient
-                LinearGradient(
-                    colors: [
-                        OlasDesign.Colors.background,
-                        OlasDesign.Colors.surface.opacity(0.5)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-                ScrollView {
-                    VStack(spacing: OlasDesign.Spacing.xl) {
-                        // Header with balance
-                        VStack(spacing: OlasDesign.Spacing.sm) {
-                            Text("⚡ NutZap")
-                                .font(OlasDesign.Typography.title)
-                                .foregroundStyle(OlasDesign.Colors.text)
-                            Text("Send ecash instantly")
-                                .font(OlasDesign.Typography.body)
-                                .foregroundStyle(OlasDesign.Colors.textSecondary)
-                            HStack(spacing: 4) {
-                                Text("Balance:")
-                                    .font(OlasDesign.Typography.caption)
-                                    .foregroundStyle(OlasDesign.Colors.textTertiary)
-                                Text("\(walletManager.currentBalance) sats")
-                                    .font(OlasDesign.Typography.captionMedium)
-                                    .foregroundStyle(OlasDesign.Colors.primary)
-                            }
-                        }
-                        .padding(.top, OlasDesign.Spacing.md)
-                        // Recipient selector
-                        if recipientPubkey == nil {
-                            recipientSelector
-                        } else if let userProfile = selectedUser {
-                            selectedRecipientCard(profile: userProfile, pubkey: recipientPubkey!)
-                        }
-                        // Amount selection
-                        amountSection
-                        // Comment field
-                        commentField
-                        // Send button
-                        sendButton
-                    }
-                    .padding(.horizontal, OlasDesign.Spacing.lg)
-                    .padding(.bottom, OlasDesign.Spacing.xl)
-                }
+                backgroundGradient
+                mainContent
             }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .foregroundStyle(OlasDesign.Colors.primary)
-                }
+                toolbarContent
             }
             .task {
                 if let pubkey = recipientPubkey {
@@ -16820,6 +15537,67 @@ struct NutZapView: View {
                 if let error = errorMessage {
                     Text(error)
                 }
+            }
+        }
+    }
+    private var backgroundGradient: some View {
+        LinearGradient(
+            colors: [
+                OlasDesign.Colors.background,
+                OlasDesign.Colors.surface.opacity(0.5)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+    }
+    private var mainContent: some View {
+        ScrollView {
+            VStack(spacing: OlasDesign.Spacing.xl) {
+                headerSection
+                recipientSection
+                amountSection
+                commentField
+                sendButton
+            }
+            .padding(.horizontal, OlasDesign.Spacing.lg)
+            .padding(.bottom, OlasDesign.Spacing.xl)
+        }
+    }
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .navigationBarLeading) {
+            Button("Cancel") {
+                dismiss()
+            }
+            .foregroundStyle(OlasDesign.Colors.primary)
+        }
+    }
+    private var headerSection: some View {
+        VStack(spacing: OlasDesign.Spacing.sm) {
+            Text("⚡ NutZap")
+                .font(OlasDesign.Typography.title)
+                .foregroundStyle(OlasDesign.Colors.text)
+            Text("Send ecash instantly")
+                .font(OlasDesign.Typography.body)
+                .foregroundStyle(OlasDesign.Colors.textSecondary)
+            HStack(spacing: 4) {
+                Text("Balance:")
+                    .font(OlasDesign.Typography.caption)
+                    .foregroundStyle(OlasDesign.Colors.textTertiary)
+                Text("\(walletManager.currentBalance) sats")
+                    .font(OlasDesign.Typography.caption)
+                    .foregroundStyle(OlasDesign.Colors.primary)
+            }
+        }
+        .padding(.top, OlasDesign.Spacing.md)
+    }
+    private var recipientSection: some View {
+        Group {
+            if recipientPubkey == nil {
+                recipientSelector
+            } else if let userProfile = selectedUser {
+                selectedRecipientCard(profile: userProfile, pubkey: recipientPubkey!)
             }
         }
     }
@@ -16863,7 +15641,7 @@ struct NutZapView: View {
     private func selectedRecipientCard(profile: NDKUserProfile, pubkey: String) -> some View {
         HStack(spacing: OlasDesign.Spacing.md) {
             // Avatar
-            if let avatarURL = profile.image {
+            if let avatarURL = profile.picture {
                 AsyncImage(url: URL(string: avatarURL)) { image in
                     image
                         .resizable()
@@ -17017,16 +15795,18 @@ struct NutZapView: View {
         .opacity((selectedAmount == 0 || (recipientPubkey == nil && selectedUserPubkey == nil)) ? 0.5 : 1)
     }
     private func loadUserProfile(pubkey: String) async {
-        guard let ndk = nostrManager.ndk else { return }
-        do {
-            if let profile = try await ndk.fetchProfile(pubkey: pubkey) {
-                await MainActor.run {
-                    self.selectedUser = profile
-                    self.selectedUserPubkey = pubkey
-                }
+        guard let ndk = nostrManager.ndk,
+              let profileManager = ndk.profileManager else { return }
+        var foundProfile: NDKUserProfile?
+        for await profile in await profileManager.observe(for: pubkey, maxAge: 3600) {
+            foundProfile = profile
+            break // Just get the first one
+        }
+        if let profile = foundProfile {
+            await MainActor.run {
+                self.selectedUser = profile
+                self.selectedUserPubkey = pubkey
             }
-        } catch {
-            print("Failed to load profile: \(error)")
         }
     }
     private func searchUser() async {
@@ -17041,13 +15821,11 @@ struct NutZapView: View {
         }
         // Try to decode npub
         if searchQuery.starts(with: "npub1") {
-            do {
-                let pubkey = try NDKUser.pubkeyFromNpub(searchQuery)
-                await loadUserProfile(pubkey: pubkey)
-                return
-            } catch {
-                print("Invalid npub: \(error)")
+            // For now, show error for npub search
+            await MainActor.run {
+                errorMessage = "npub search coming soon. Please use hex pubkey for now."
             }
+            return
         }
         // Search by name - for now just show error
         await MainActor.run {
@@ -17065,29 +15843,40 @@ struct NutZapView: View {
                 isSending = false
             }
         }
-        do {
-            // Find a recent event from the user to zap
-            guard let ndk = nostrManager.ndk else { return }
+        // Find a recent event from the user to zap
+        guard let ndk = nostrManager.ndk else { return }
             let filter = NDKFilter(
                 authors: [pubkey],
                 kinds: [EventKind.textNote],
                 limit: 1
             )
-            if let event = try await ndk.fetchEvent(filter: filter) {
+            // Use observe to get an event
+            let dataSource = ndk.observe(
+                filter: filter,
+                maxAge: 0,
+                cachePolicy: .cacheOnly
+            )
+            var foundEvent: NDKEvent?
+            for await event in dataSource.events {
+                foundEvent = event
+                break // Just get the first one
+            }
+        if let event = foundEvent {
+            do {
                 try await walletManager.zapEvent(event, amount: selectedAmount, comment: comment.isEmpty ? nil : comment)
                 await MainActor.run {
                     showSuccess = true
                     OlasDesign.Haptic.success()
                 }
-            } else {
+            } catch {
                 await MainActor.run {
-                    errorMessage = "Couldn't find a recent post from this user to zap"
+                    errorMessage = error.localizedDescription
+                    OlasDesign.Haptic.error()
                 }
             }
-        } catch {
+        } else {
             await MainActor.run {
-                errorMessage = error.localizedDescription
-                OlasDesign.Haptic.error()
+                errorMessage = "Couldn't find a recent post from this user to zap"
             }
         }
     }
@@ -18546,499 +17335,6 @@ struct PresetAmountButton: View {
 
 <file path="Olas/Views/Wallet/TransactionDetailView.swift">
 import SwiftUI
-struct TransactionDetailView: View {
-    let transaction: OlasWalletManager.WalletTransaction
-    @ObservedObject var walletManager: OlasWalletManager
-    @Environment(\.dismiss) private var dismiss
-    @State private var showingShareSheet = false
-    @State private var copiedToClipboard = false
-    @State private var animateContent = false
-    @State private var showingQRCode = false
-    @State private var particleSystem = ParticleSystem()
-    var body: some View {
-        NavigationStack {
-            ZStack {
-                // Background
-                OlasDesign.Colors.background
-                    .ignoresSafeArea()
-                ScrollView(showsIndicators: false) {
-                    VStack(spacing: OlasDesign.Spacing.xl) {
-                        // Transaction Icon with particle effects
-                        ZStack {
-                            ParticleEffectView(particleSystem: particleSystem)
-                                .allowsHitTesting(false)
-                            transactionIcon
-                                .padding(.top, OlasDesign.Spacing.xl)
-                                .scaleEffect(animateContent ? 1 : 0.8)
-                                .opacity(animateContent ? 1 : 0)
-                                .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.1), value: animateContent)
-                        }
-                        // Amount with counter animation
-                        amountSection
-                            .offset(y: animateContent ? 0 : 50)
-                            .opacity(animateContent ? 1 : 0)
-                            .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.2), value: animateContent)
-                        // Status with pulse animation
-                        statusSection
-                            .offset(y: animateContent ? 0 : 50)
-                            .opacity(animateContent ? 1 : 0)
-                            .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.3), value: animateContent)
-                        // Details with glass morphism
-                        detailsSection
-                            .offset(y: animateContent ? 0 : 50)
-                            .opacity(animateContent ? 1 : 0)
-                            .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.4), value: animateContent)
-                        // Actions with ripple effects
-                        if transaction.invoice != nil || transaction.status == .pending {
-                            actionsSection
-                                .offset(y: animateContent ? 0 : 50)
-                                .opacity(animateContent ? 1 : 0)
-                                .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.5), value: animateContent)
-                        }
-                        Spacer(minLength: 50)
-                    }
-                    .padding(.horizontal, OlasDesign.Spacing.md)
-                }
-                .onAppear {
-                    withAnimation {
-                        animateContent = true
-                    }
-                    // Trigger particle effect based on transaction type
-                    if transaction.status == .completed {
-                        #if os(iOS)
-                        particleSystem.emit(count: 20, from: CGPoint(x: UIScreen.main.bounds.width / 2, y: 200))
-                        #else
-                        particleSystem.emit(count: 20, from: CGPoint(x: 400, y: 200))
-                        #endif
-                    }
-                }
-            }
-            .navigationTitle("Transaction Details")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-            }
-            .sheet(isPresented: $showingShareSheet) {
-                if let invoice = transaction.invoice {
-                    ShareSheet(items: [invoice])
-                }
-            }
-            .sheet(isPresented: $showingQRCode) {
-                TransactionQRCodeView(content: transaction.invoice ?? transaction.id.uuidString)
-            }
-        }
-    }
-    private var transactionIcon: some View {
-        ZStack {
-            // Animated background circles with gradient
-            ForEach(0..<4) { index in
-                Circle()
-                    .stroke(
-                        LinearGradient(
-                            colors: iconBackground.colors.map { $0.opacity(0.3 - Double(index) * 0.08) },
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 2
-                    )
-                    .frame(width: CGFloat(100 + index * 25), height: CGFloat(100 + index * 25))
-                    .scaleEffect(transaction.status == .pending ? 1.1 : 1.0)
-                    .rotationEffect(.degrees(Double(index) * 45))
-                    .animation(
-                        transaction.status == .pending ?
-                        .linear(duration: 10 + Double(index) * 2)
-                        .repeatForever(autoreverses: false) :
-                        .default,
-                        value: transaction.status
-                    )
-            }
-            // Glow effect
-            Circle()
-                .fill(
-                    RadialGradient(
-                        colors: [iconBackground.colors[0].opacity(0.5), Color.clear],
-                        center: .center,
-                        startRadius: 20,
-                        endRadius: 60
-                    )
-                )
-                .frame(width: 120, height: 120)
-                .blur(radius: 20)
-            // Main icon with 3D effect
-            Circle()
-                .fill(iconBackground)
-                .frame(width: 80, height: 80)
-                .overlay(
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [Color.white.opacity(0.25), Color.clear],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                )
-                .overlay(
-                    Image(systemName: iconName)
-                        .font(.system(size: 36, weight: .medium))
-                        .foregroundColor(.white)
-                        .shadow(color: .black.opacity(0.2), radius: 2, x: 0, y: 2)
-                        .rotationEffect(transaction.type == .sent ? .degrees(-45) : .degrees(0))
-                )
-                .shadow(color: iconBackground.colors[0].opacity(0.6), radius: 20, x: 0, y: 10)
-        }
-    }
-    private var amountSection: some View {
-        VStack(spacing: OlasDesign.Spacing.sm) {
-            // Amount
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text(transaction.type == .received || transaction.type == .minted ? "+" : "-")
-                    .font(.system(size: 36, weight: .bold, design: .rounded))
-                    .foregroundStyle(amountColor)
-                Text(formatSats(transaction.amount))
-                    .font(.system(size: 36, weight: .bold, design: .rounded))
-                    .foregroundStyle(amountColor)
-                Text("sats")
-                    .font(OlasDesign.Typography.body)
-                    .foregroundStyle(OlasDesign.Colors.textSecondary)
-            }
-            // USD equivalent
-            Text("≈ $\(String(format: "%.2f", Double(transaction.amount) * 0.0003))")
-                .font(OlasDesign.Typography.body)
-                .foregroundStyle(OlasDesign.Colors.textTertiary)
-            // Fee if applicable
-            if let fee = transaction.fee, fee > 0 {
-                HStack(spacing: 4) {
-                    Image(systemName: "minus.circle")
-                        .font(.caption)
-                    Text("\(fee) sats fee")
-                }
-                .font(OlasDesign.Typography.caption)
-                .foregroundStyle(OlasDesign.Colors.textTertiary)
-            }
-        }
-    }
-    private var statusSection: some View {
-        HStack(spacing: OlasDesign.Spacing.sm) {
-            // Status badge
-            HStack(spacing: 6) {
-                if transaction.status == .pending {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle())
-                        .scaleEffect(0.8)
-                } else {
-                    Image(systemName: statusIcon)
-                        .font(.caption)
-                        .foregroundStyle(statusColor)
-                }
-                Text(statusText)
-                    .font(OlasDesign.Typography.caption)
-                    .foregroundStyle(statusColor)
-            }
-            .padding(.horizontal, OlasDesign.Spacing.md)
-            .padding(.vertical, OlasDesign.Spacing.sm)
-            .background(
-                Capsule()
-                    .fill(statusColor.opacity(0.1))
-            )
-            // Timestamp
-            Text(transaction.timestamp.formatted())
-                .font(OlasDesign.Typography.caption)
-                .foregroundStyle(OlasDesign.Colors.textSecondary)
-        }
-    }
-    private var detailsSection: some View {
-        VStack(spacing: OlasDesign.Spacing.lg) {
-            // Description with glass effect
-            DetailRow(
-                icon: "text.quote",
-                label: "Description",
-                value: transaction.description
-            )
-            .padding(.horizontal, OlasDesign.Spacing.sm)
-            // Type
-            DetailRow(
-                icon: "arrow.triangle.2.circlepath",
-                label: "Type",
-                value: typeText
-            )
-            // Mint if available
-            if let mint = transaction.mint {
-                DetailRow(
-                    icon: "building.2",
-                    label: "Mint",
-                    value: mint.replacingOccurrences(of: "https://", with: "")
-                )
-            }
-            // Transaction ID
-            DetailRow(
-                icon: "number",
-                label: "Transaction ID",
-                value: transaction.id.uuidString.lowercased()
-            ) {
-                copyToClipboard(transaction.id.uuidString.lowercased())
-            }
-            // Invoice if available
-            if let invoice = transaction.invoice {
-                DetailRow(
-                    icon: "doc.text",
-                    label: "Invoice",
-                    value: String(invoice.prefix(20)) + "..."
-                ) {
-                    copyToClipboard(invoice)
-                }
-            }
-        }
-        .padding(OlasDesign.Spacing.md)
-        .background(
-            ZStack {
-                // Glass morphism background
-                RoundedRectangle(cornerRadius: OlasDesign.CornerRadius.xl)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                OlasDesign.Colors.surface.opacity(0.8),
-                                OlasDesign.Colors.surface.opacity(0.6)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                // Border gradient
-                RoundedRectangle(cornerRadius: OlasDesign.CornerRadius.xl)
-                    .stroke(
-                        LinearGradient(
-                            colors: [Color.white.opacity(0.2), Color.white.opacity(0.05)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        ),
-                        lineWidth: 1
-                    )
-            }
-        )
-        .shadow(color: Color.black.opacity(0.1), radius: 15, x: 0, y: 8)
-    }
-    private var actionsSection: some View {
-        VStack(spacing: OlasDesign.Spacing.sm) {
-            HStack(spacing: OlasDesign.Spacing.sm) {
-                if let invoice = transaction.invoice {
-                    // Share invoice with ripple effect
-                    RippleButton(
-                        icon: "square.and.arrow.up",
-                        title: "Share",
-                        gradient: OlasDesign.Colors.primaryGradient
-                    ) {
-                        showingShareSheet = true
-                    }
-                    // Show QR Code
-                    RippleButton(
-                        icon: "qrcode",
-                        title: "QR",
-                        gradient: [Color(hex: "4ECDC4"), Color(hex: "44A08D")]
-                    ) {
-                        showingQRCode = true
-                    }
-                }
-            }
-            if transaction.status == .pending {
-                // Cancel transaction (if applicable)
-                Button {
-                    // TODO: Implement cancel
-                    OlasDesign.Haptic.warning()
-                } label: {
-                    HStack {
-                        Image(systemName: "xmark.circle")
-                        Text("Cancel Transaction")
-                    }
-                    .font(OlasDesign.Typography.bodyMedium)
-                    .foregroundStyle(OlasDesign.Colors.error)
-                    .frame(maxWidth: .infinity)
-                    .padding(OlasDesign.Spacing.md)
-                    .background(
-                        RoundedRectangle(cornerRadius: OlasDesign.CornerRadius.md)
-                            .stroke(OlasDesign.Colors.error, lineWidth: 1)
-                    )
-                }
-            }
-        }
-    }
-    // MARK: - Computed Properties
-    private var iconName: String {
-        switch transaction.type {
-        case .sent:
-            return "paperplane.fill"
-        case .received:
-            return "arrow.down.circle.fill"
-        case .zapped:
-            return "bolt.fill"
-        case .minted:
-            return "plus.circle.fill"
-        case .melted:
-            return "flame.fill"
-        case .swapped:
-            return "arrow.triangle.2.circlepath"
-        }
-    }
-    private var iconBackground: LinearGradient {
-        switch transaction.type {
-        case .sent:
-            return LinearGradient(
-                colors: [Color(hex: "FF6B6B"), Color(hex: "FF8E53")],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case .received:
-            return LinearGradient(
-                colors: [Color(hex: "4ECDC4"), Color(hex: "44A08D")],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case .zapped:
-            return LinearGradient(
-                colors: [Color(hex: "FFA726"), Color(hex: "FFD54F")],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case .minted:
-            return LinearGradient(
-                colors: [Color(hex: "667EEA"), Color(hex: "764BA2")],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case .melted:
-            return LinearGradient(
-                colors: [Color(hex: "F093FB"), Color(hex: "F5576C")],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case .swapped:
-            return LinearGradient(
-                colors: [Color(hex: "4FACFE"), Color(hex: "00F2FE")],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
-    }
-    private var amountColor: Color {
-        switch transaction.type {
-        case .received, .minted:
-            return OlasDesign.Colors.success
-        case .sent, .zapped, .melted:
-            return OlasDesign.Colors.text
-        case .swapped:
-            return OlasDesign.Colors.warning
-        }
-    }
-    private var statusIcon: String {
-        switch transaction.status {
-        case .completed:
-            return "checkmark.circle.fill"
-        case .failed:
-            return "xmark.circle.fill"
-        case .pending:
-            return "clock.fill"
-        }
-    }
-    private var statusColor: Color {
-        switch transaction.status {
-        case .completed:
-            return OlasDesign.Colors.success
-        case .failed:
-            return OlasDesign.Colors.error
-        case .pending:
-            return OlasDesign.Colors.warning
-        }
-    }
-    private var statusText: String {
-        switch transaction.status {
-        case .completed:
-            return "Completed"
-        case .failed:
-            return "Failed"
-        case .pending:
-            return "Pending"
-        }
-    }
-    private var typeText: String {
-        switch transaction.type {
-        case .sent:
-            return "Sent Payment"
-        case .received:
-            return "Received Payment"
-        case .zapped:
-            return "Zap"
-        case .minted:
-            return "Minted Tokens"
-        case .melted:
-            return "Melted Tokens"
-        case .swapped:
-            return "Token Swap"
-        }
-    }
-    // MARK: - Helper Methods
-    private func formatSats(_ sats: Int64) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.groupingSeparator = ","
-        return formatter.string(from: NSNumber(value: sats)) ?? "0"
-    }
-    private func copyToClipboard(_ text: String) {
-        #if os(iOS)
-        UIPasteboard.general.string = text
-        #else
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
-        #endif
-        OlasDesign.Haptic.success()
-        withAnimation {
-            copiedToClipboard = true
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            withAnimation {
-                copiedToClipboard = false
-            }
-        }
-    }
-}
-// MARK: - Supporting Views
-struct DetailRow: View {
-    let icon: String
-    let label: String
-    let value: String
-    var action: (() -> Void)? = nil
-    var body: some View {
-        HStack(spacing: OlasDesign.Spacing.md) {
-            Image(systemName: icon)
-                .font(.body)
-                .foregroundStyle(OlasDesign.Colors.textSecondary)
-                .frame(width: 24)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(label)
-                    .font(OlasDesign.Typography.caption)
-                    .foregroundStyle(OlasDesign.Colors.textSecondary)
-                Text(value)
-                    .font(OlasDesign.Typography.body)
-                    .foregroundStyle(OlasDesign.Colors.text)
-                    .lineLimit(2)
-            }
-            Spacer()
-            if action != nil {
-                Button {
-                    action?()
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                        .font(.body)
-                        .foregroundStyle(OlasDesign.Colors.primary)
-                }
-            }
-        }
-        .padding(.vertical, OlasDesign.Spacing.xs)
-    }
-}
 // MARK: - Particle System
 class ParticleSystem: ObservableObject {
     @Published var particles: [Particle] = []
@@ -19048,7 +17344,7 @@ class ParticleSystem: ObservableObject {
                 position: origin,
                 velocity: CGPoint(
                     x: CGFloat.random(in: -150...150),
-                    y: CGFloat.random(in: -300...-100)
+                    y: CGFloat.random(in: -300...(-100))
                 ),
                 color: Color(hex: ["FFA726", "FFD54F", "4ECDC4", "667EEA"].randomElement()!),
                 size: CGFloat.random(in: 4...8)
@@ -19165,6 +17461,519 @@ struct RippleButton: View {
         .buttonStyle(PlainButtonStyle())
     }
 }
+struct TransactionDetailView: View {
+    let transaction: OlasWalletManager.WalletTransaction
+    @ObservedObject var walletManager: OlasWalletManager
+    @Environment(\.dismiss) private var dismiss
+    @State private var showingShareSheet = false
+    @State private var copiedToClipboard = false
+    @State private var animateContent = false
+    @State private var showingQRCode = false
+    @State private var particleSystem = ParticleSystem()
+    var body: some View {
+        NavigationStack {
+            mainContent
+                .navigationTitle("Transaction Details")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Done") {
+                            dismiss()
+                        }
+                    }
+                }
+                .sheet(isPresented: $showingShareSheet) {
+                    if let invoice = transaction.invoice {
+                        ShareSheet(items: [invoice])
+                    }
+                }
+                .sheet(isPresented: $showingQRCode) {
+                    TransactionQRCodeView(content: transaction.invoice ?? transaction.id.uuidString)
+                }
+        }
+    }
+    private var mainContent: some View {
+        ZStack {
+            // Background
+            OlasDesign.Colors.background
+                .ignoresSafeArea()
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: OlasDesign.Spacing.xl) {
+                    // Transaction Icon with particle effects
+                    iconSection
+                    // Amount with counter animation
+                    amountSection
+                        .offset(y: animateContent ? 0 : 50)
+                        .opacity(animateContent ? 1 : 0)
+                        .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.2), value: animateContent)
+                    // Status with pulse animation
+                    statusSection
+                        .offset(y: animateContent ? 0 : 50)
+                        .opacity(animateContent ? 1 : 0)
+                        .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.3), value: animateContent)
+                    // Details with glass morphism
+                    detailsSection
+                        .offset(y: animateContent ? 0 : 50)
+                        .opacity(animateContent ? 1 : 0)
+                        .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.4), value: animateContent)
+                    // Actions with ripple effects
+                    if transaction.invoice != nil || transaction.status == .pending {
+                        actionsSection
+                            .offset(y: animateContent ? 0 : 50)
+                            .opacity(animateContent ? 1 : 0)
+                            .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.5), value: animateContent)
+                    }
+                    Spacer(minLength: 50)
+                }
+                .padding(.horizontal, OlasDesign.Spacing.md)
+            }
+            .onAppear {
+                withAnimation {
+                    animateContent = true
+                }
+                // Trigger particle effect based on transaction type
+                if transaction.status == .completed {
+                    #if os(iOS)
+                    particleSystem.emit(count: 20, from: CGPoint(x: UIScreen.main.bounds.width / 2, y: 200))
+                    #else
+                    particleSystem.emit(count: 20, from: CGPoint(x: 400, y: 200))
+                    #endif
+                }
+            }
+        }
+    }
+    private var iconSection: some View {
+        ZStack {
+            ParticleEffectView(particleSystem: particleSystem)
+                .allowsHitTesting(false)
+            transactionIcon
+                .padding(.top, OlasDesign.Spacing.xl)
+                .scaleEffect(animateContent ? 1 : 0.8)
+                .opacity(animateContent ? 1 : 0)
+                .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.1), value: animateContent)
+        }
+    }
+    private var transactionIcon: some View {
+        ZStack {
+            animatedBackgroundCircles
+            centralIcon
+        }
+        .frame(height: 200)
+    }
+    private var animatedBackgroundCircles: some View {
+        ForEach(0..<4) { index in
+            backgroundCircle(for: index)
+        }
+    }
+    private func backgroundCircle(for index: Int) -> some View {
+        Circle()
+            .stroke(
+                LinearGradient(
+                    colors: [OlasDesign.Colors.primary.opacity(0.3 - Double(index) * 0.08), OlasDesign.Colors.primary.opacity(0.2 - Double(index) * 0.05)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 2
+            )
+            .frame(width: CGFloat(100 + index * 25), height: CGFloat(100 + index * 25))
+            .scaleEffect(transaction.status == .pending ? 1.1 : 1.0)
+            .rotationEffect(.degrees(Double(index) * 45))
+            .animation(
+                transaction.status == .pending ?
+                Animation.linear(duration: Double(3 + index)).repeatForever(autoreverses: false) :
+                    .default,
+                value: transaction.status
+            )
+    }
+    private var centralIcon: some View {
+        ZStack {
+            Circle()
+                .fill(iconBackground)
+                .frame(width: 80, height: 80)
+            Image(systemName: iconName)
+                .font(.system(size: 35, weight: .semibold))
+                .foregroundColor(.white)
+                .scaleEffect(transaction.status == .pending ? 1.0 : 1.2)
+                .animation(
+                    transaction.status == .pending ?
+                    Animation.easeInOut(duration: 1).repeatForever(autoreverses: true) :
+                        .default,
+                    value: transaction.status
+                )
+        }
+        .shadow(color: OlasDesign.Colors.primary.opacity(0.5), radius: 20, x: 0, y: 10)
+    }
+    private var amountSection: some View {
+        VStack(spacing: OlasDesign.Spacing.xs) {
+            AnimatedCounterView(
+                value: transaction.amount,
+                fontSize: 42,
+                fontWeight: .bold,
+                color: amountColor,
+                prefix: transaction.type == .sent || transaction.type == .zapped || transaction.type == .nutzapped ? "-" : "+",
+                suffix: " sats"
+            )
+            if let fiatValue = calculateFiatValue(sats: transaction.amount) {
+                Text(fiatValue)
+                    .font(OlasDesign.Typography.body)
+                    .foregroundStyle(OlasDesign.Colors.textSecondary)
+            }
+        }
+        .padding(.top, OlasDesign.Spacing.md)
+    }
+    private var statusSection: some View {
+        HStack(spacing: OlasDesign.Spacing.md) {
+            // Status indicator with pulse
+            ZStack {
+                Circle()
+                    .fill(statusColor.opacity(0.2))
+                    .frame(width: 40, height: 40)
+                if transaction.status == .pending {
+                    Circle()
+                        .stroke(statusColor, lineWidth: 2)
+                        .frame(width: 40, height: 40)
+                        .scaleEffect(1.2)
+                        .opacity(0)
+                        .animation(
+                            Animation.easeOut(duration: 1.5)
+                                .repeatForever(autoreverses: false),
+                            value: transaction.status
+                        )
+                }
+                Image(systemName: statusIcon)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(statusColor)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(statusText)
+                    .font(OlasDesign.Typography.bodyMedium)
+                    .foregroundStyle(OlasDesign.Colors.text)
+                Text(transaction.timestamp.formatted())
+                    .font(OlasDesign.Typography.caption)
+                    .foregroundStyle(OlasDesign.Colors.textSecondary)
+            }
+            Spacer()
+        }
+        .padding(OlasDesign.Spacing.md)
+        .background(
+            RoundedRectangle(cornerRadius: OlasDesign.CornerRadius.md)
+                .fill(OlasDesign.Colors.surface)
+                .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 5)
+        )
+    }
+    private var detailsSection: some View {
+        VStack(spacing: 0) {
+            DetailRow(
+                icon: "rectangle.portrait.and.arrow.right",
+                label: "Type",
+                value: typeText
+            )
+            if let mintURL = transaction.mint {
+                Divider()
+                    .foregroundStyle(OlasDesign.Colors.divider)
+                DetailRow(
+                    icon: "building.columns",
+                    label: "Mint",
+                    value: mintURL.replacingOccurrences(of: "https://", with: "")
+                )
+            }
+            if !transaction.description.isEmpty {
+                Divider()
+                    .foregroundStyle(OlasDesign.Colors.divider)
+                DetailRow(
+                    icon: "text.quote",
+                    label: "Note",
+                    value: transaction.description
+                )
+            }
+            if let id = transaction.invoice {
+                Divider()
+                    .foregroundStyle(OlasDesign.Colors.divider)
+                DetailRow(
+                    icon: "doc.text",
+                    label: "Invoice",
+                    value: String(id.prefix(20)) + "...",
+                    showCopyButton: true,
+                    onCopy: {
+                        copyToClipboard(id)
+                    }
+                )
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: OlasDesign.CornerRadius.md)
+                .fill(OlasDesign.Colors.surface)
+                .shadow(color: Color.black.opacity(0.05), radius: 10, x: 0, y: 5)
+        )
+    }
+    private var actionsSection: some View {
+        VStack(spacing: OlasDesign.Spacing.md) {
+            if transaction.invoice != nil {
+                // View QR Code
+                RippleButton(
+                    icon: "qrcode",
+                    title: "View QR Code",
+                    gradient: [Color(hex: "667EEA"), Color(hex: "764BA2")],
+                    action: {
+                        showingQRCode = true
+                    }
+                )
+                // Share invoice
+                RippleButton(
+                    icon: "square.and.arrow.up",
+                    title: "Share Invoice",
+                    gradient: [Color(hex: "4FACFE"), Color(hex: "00F2FE")],
+                    action: {
+                        showingShareSheet = true
+                    }
+                )
+            }
+            if transaction.status == .pending {
+                // Cancel transaction (if applicable)
+                Button {
+                    // TODO: Implement cancel
+                    OlasDesign.Haptic.impact(.medium)
+                } label: {
+                    HStack {
+                        Image(systemName: "xmark.circle")
+                        Text("Cancel Transaction")
+                    }
+                    .font(OlasDesign.Typography.bodyMedium)
+                    .foregroundStyle(OlasDesign.Colors.error)
+                    .frame(maxWidth: .infinity)
+                    .padding(OlasDesign.Spacing.md)
+                    .background(
+                        RoundedRectangle(cornerRadius: OlasDesign.CornerRadius.md)
+                            .stroke(OlasDesign.Colors.error, lineWidth: 1)
+                    )
+                }
+            }
+        }
+    }
+    // MARK: - Computed Properties
+    private var iconName: String {
+        switch transaction.type {
+        case .sent:
+            return "paperplane.fill"
+        case .received:
+            return "arrow.down.circle.fill"
+        case .zapped, .nutzapped:
+            return "bolt.fill"
+        case .minted:
+            return "plus.circle.fill"
+        case .melted:
+            return "flame.fill"
+        case .swapped:
+            return "arrow.triangle.2.circlepath"
+        }
+    }
+    private var iconBackground: LinearGradient {
+        switch transaction.type {
+        case .sent:
+            return LinearGradient(
+                colors: [Color(hex: "FF6B6B"), Color(hex: "FF8E53")],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .received:
+            return LinearGradient(
+                colors: [Color(hex: "48BB78"), Color(hex: "68D391")],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .zapped, .nutzapped:
+            return LinearGradient(
+                colors: [Color(hex: "805AD5"), Color(hex: "9F7AEA")],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .minted:
+            return LinearGradient(
+                colors: [Color(hex: "3182CE"), Color(hex: "4299E1")],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .melted:
+            return LinearGradient(
+                colors: [Color(hex: "ED8936"), Color(hex: "F6AD55")],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .swapped:
+            return LinearGradient(
+                colors: [Color(hex: "319795"), Color(hex: "38B2AC")],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+    private var amountColor: Color {
+        switch transaction.type {
+        case .received, .minted:
+            return OlasDesign.Colors.success
+        case .sent, .zapped, .nutzapped, .melted:
+            return OlasDesign.Colors.text
+        case .swapped:
+            return OlasDesign.Colors.warning
+        }
+    }
+    private var statusIcon: String {
+        switch transaction.status {
+        case .completed:
+            return "checkmark.circle.fill"
+        case .failed:
+            return "xmark.circle.fill"
+        case .pending:
+            return "clock.fill"
+        }
+    }
+    private var statusColor: Color {
+        switch transaction.status {
+        case .completed:
+            return OlasDesign.Colors.success
+        case .failed:
+            return OlasDesign.Colors.error
+        case .pending:
+            return OlasDesign.Colors.warning
+        }
+    }
+    private var statusText: String {
+        switch transaction.status {
+        case .completed:
+            return "Completed"
+        case .failed:
+            return "Failed"
+        case .pending:
+            return "Pending"
+        }
+    }
+    private var typeText: String {
+        switch transaction.type {
+        case .sent:
+            return "Sent"
+        case .received:
+            return "Received"
+        case .zapped:
+            return "Zapped"
+        case .nutzapped:
+            return "NutZapped"
+        case .minted:
+            return "Minted"
+        case .melted:
+            return "Melted"
+        case .swapped:
+            return "Swapped"
+        }
+    }
+    // MARK: - Helper Methods
+    private func formatSats(_ sats: Int64) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.groupingSeparator = ","
+        return formatter.string(from: NSNumber(value: sats)) ?? "\(sats)"
+    }
+    private func copyToClipboard(_ text: String) {
+        #if os(iOS)
+        UIPasteboard.general.string = text
+        #else
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        #endif
+        OlasDesign.Haptic.success()
+        copiedToClipboard = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            copiedToClipboard = false
+        }
+    }
+    private func calculateFiatValue(sats: Int64) -> String? {
+        // TODO: Implement real BTC price fetching
+        let btcPriceUSD = 45000.0 // Placeholder
+        let btcValue = Double(sats) / 100_000_000
+        let usdValue = btcValue * btcPriceUSD
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "USD"
+        formatter.maximumFractionDigits = 2
+        return formatter.string(from: NSNumber(value: usdValue))
+    }
+}
+// MARK: - Supporting Views
+struct AnimatedCounterView: View {
+    let value: Int64
+    let fontSize: CGFloat
+    let fontWeight: Font.Weight
+    let color: Color
+    let prefix: String
+    let suffix: String
+    @State private var displayValue: Int64 = 0
+    var body: some View {
+        HStack(spacing: 2) {
+            Text(prefix)
+                .font(.system(size: fontSize, weight: fontWeight))
+                .foregroundColor(color)
+            Text(formatSats(displayValue))
+                .font(.system(size: fontSize, weight: fontWeight, design: .rounded))
+                .foregroundColor(color)
+            Text(suffix)
+                .font(.system(size: fontSize * 0.7, weight: .medium))
+                .foregroundColor(color.opacity(0.8))
+        }
+        .onAppear {
+            withAnimation(.easeOut(duration: 0.8)) {
+                displayValue = value
+            }
+        }
+    }
+    private func formatSats(_ sats: Int64) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.groupingSeparator = ","
+        return formatter.string(from: NSNumber(value: sats)) ?? "\(sats)"
+    }
+}
+struct DetailRow: View {
+    let icon: String
+    let label: String
+    let value: String
+    var showCopyButton: Bool = false
+    var onCopy: (() -> Void)? = nil
+    @State private var showCopied = false
+    var body: some View {
+        HStack(spacing: OlasDesign.Spacing.md) {
+            Image(systemName: icon)
+                .font(.system(size: 16))
+                .foregroundStyle(OlasDesign.Colors.textSecondary)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                    .font(OlasDesign.Typography.caption)
+                    .foregroundStyle(OlasDesign.Colors.textSecondary)
+                Text(value)
+                    .font(OlasDesign.Typography.body)
+                    .foregroundStyle(OlasDesign.Colors.text)
+            }
+            Spacer()
+            if showCopyButton, let onCopy = onCopy {
+                Button {
+                    onCopy()
+                    withAnimation {
+                        showCopied = true
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        withAnimation {
+                            showCopied = false
+                        }
+                    }
+                } label: {
+                    Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 14))
+                        .foregroundStyle(showCopied ? OlasDesign.Colors.success : OlasDesign.Colors.primary)
+                }
+            }
+        }
+        .padding(.vertical, OlasDesign.Spacing.xs)
+    }
+}
 // MARK: - QR Code View
 struct TransactionQRCodeView: View {
     let content: String
@@ -19239,11 +18048,7 @@ struct TransactionQRCodeView: View {
             .navigationBarTitleDisplayMode(.inline)
             #endif
             .toolbar {
-                #if os(iOS)
                 ToolbarItem(placement: .navigationBarTrailing) {
-                #else
-                ToolbarItem(placement: .automatic) {
-                #endif
                     Button("Done") {
                         dismiss()
                     }
@@ -19287,7 +18092,6 @@ struct TransactionQRCodeView: View {
             }
         }
     }
-}
 }
 </file>
 
@@ -19462,7 +18266,7 @@ struct LoginSheet: View {
                             Text("Welcome Back")
                                 .font(.system(size: 28, weight: .semibold, design: .rounded))
                                 .foregroundStyle(.white)
-                            Text("Enter your private key to continue")
+                            Text("Enter your private key (nsec or hex format)")
                                 .font(OlasDesign.Typography.body)
                                 .foregroundStyle(.white.opacity(0.7))
                         }
@@ -19489,6 +18293,7 @@ struct LoginSheet: View {
                                 .autocapitalization(.none)
                                 #endif
                                 .autocorrectionDisabled()
+                                .accessibilityIdentifier("privateKeyField")
                         }
                         .padding(.horizontal, OlasDesign.Spacing.xl)
                         // Login button
@@ -20368,9 +19173,6 @@ struct FeedView: View {
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                #else
-                ToolbarItem(placement: .automatic) {
-                #endif
                     NavigationLink(destination: CreatePostView()) {
                         Image(systemName: "camera.fill")
                             .onTapGesture {
@@ -20385,6 +19187,7 @@ struct FeedView: View {
                             )
                     }
                 }
+                #endif
             }
             .refreshable {
                 await handleRefresh()
@@ -20435,8 +19238,6 @@ struct FeedView: View {
     private func handleRefresh() async {
         #if os(iOS)
         OlasDesign.Haptic.impact(.medium)
-        #else
-        OlasDesign.Haptic.impact(0)
         #endif
         hasAppeared = false
         await viewModel.refresh()
@@ -20763,7 +19564,7 @@ class FeedViewModel: ObservableObject {
     private var profileTasks: [String: Task<Void, Never>] = [:]
     private var feedTask: Task<Void, Never>?
     private var engagementTasks: [String: Task<Void, Never>] = [:]
-    private var lastEventTime: Date?
+    private var lastEventTime: Timestamp?
     func startFeed(with ndk: NDK) {
         // Cancel any existing feed task
         feedTask?.cancel()
@@ -20775,8 +19576,8 @@ class FeedViewModel: ObservableObject {
                 self.isLoading = false
                 self.isLive = true
             }
-            // Subscribe to both picture posts (NIP-68) and text posts with images
-            let filter = NDKFilter(kinds: [EventKind.image, EventKind.textNote], limit: 100)
+            // Subscribe to kind 20 picture posts (NIP-68)
+            let filter = NDKFilter(kinds: [20], limit: 100)
             // Create data source using observe with reactive pattern
             let dataSource = ndk.observe(
                 filter: filter,
@@ -20784,10 +19585,8 @@ class FeedViewModel: ObservableObject {
                 cachePolicy: .cacheWithNetwork
             )
             for await event in dataSource.events {
-                // Check if this is an image post or text post with images
-                let isImagePost = event.kind == EventKind.image
-                let hasImages = event.kind == EventKind.textNote && containsImageURL(event.content)
-                if isImagePost || hasImages {
+                // Process kind 20 events which use imeta tags
+                if event.kind == 20 {
                     let feedItem = FeedItem(from: event)
                     await MainActor.run {
                         // Check if this is a new post (arrived after initial load)
@@ -20850,25 +19649,6 @@ class FeedViewModel: ObservableObject {
                 items[index].profile = profile
             }
         }
-    }
-    private func containsImageURL(_ content: String) -> Bool {
-        // Simple check for image URLs
-        let imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"]
-        let lowercased = content.lowercased()
-        // Check for direct image URLs
-        for ext in imageExtensions {
-            if lowercased.contains(ext) {
-                return true
-            }
-        }
-        // Check for common image hosting services
-        let imageHosts = ["imgur.com", "i.imgur.com", "nostr.build", "void.cat", "imgprxy.stacker.news"]
-        for host in imageHosts {
-            if lowercased.contains(host) {
-                return true
-            }
-        }
-        return false
     }
     func refresh() async {
         // Clear items and restart subscription
@@ -21035,50 +19815,9 @@ struct FeedItem: Identifiable {
         }
         self.blurhashes = hashes
     }
-    static func extractImageURLs(from content: String) -> [String] {
-        var urls: [String] = []
-        // Regular expression to find URLs
-        let urlPattern = #"https?://[^\s<>"{}|\\^\[\]`]+"#
-        do {
-            let regex = try NSRegularExpression(pattern: urlPattern, options: [])
-            let matches = regex.matches(in: content, options: [], range: NSRange(content.startIndex..., in: content))
-            for match in matches {
-                if let range = Range(match.range, in: content) {
-                    let urlString = String(content[range])
-                    // Check if it's an image URL
-                    let imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"]
-                    let lowercasedURL = urlString.lowercased()
-                    // Check for direct image extensions
-                    if imageExtensions.contains(where: { lowercasedURL.contains($0) }) {
-                        urls.append(urlString)
-                        continue
-                    }
-                    // Check for image hosting services
-                    let imageHosts = ["imgur.com", "i.imgur.com", "nostr.build", "void.cat", "imgprxy.stacker.news"]
-                    if imageHosts.contains(where: { lowercasedURL.contains($0) }) {
-                        urls.append(urlString)
-                    }
-                }
-            }
-        } catch {
-            print("Error extracting URLs: \(error)")
-        }
-        return urls
-    }
     static func extractImagesFromEvent(_ event: NDKEvent) -> [String] {
         // Use NDKSwift's built-in imeta support
         return event.imageURLs
-    }
-    private static func isImageURL(_ url: String) -> Bool {
-        let imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"]
-        let lowercasedURL = url.lowercased()
-        // Check for direct image extensions
-        if imageExtensions.contains(where: { lowercasedURL.contains($0) }) {
-            return true
-        }
-        // Check for image hosting services
-        let imageHosts = ["imgur.com", "i.imgur.com", "nostr.build", "void.cat", "imgprxy.stacker.news"]
-        return imageHosts.contains(where: { lowercasedURL.contains($0) })
     }
 }
 // MARK: - Feed Item Skeleton
@@ -21345,7 +20084,7 @@ struct LikeAnimationView: View {
             hearts.append(heart)
         }
     }
-}}
+}
 </file>
 
 <file path="Olas/Views/MainTabView.swift">
@@ -21359,12 +20098,6 @@ struct MainTabView: View {
     @State private var showCreatePost = false
     @State private var tabBarOpacity = 1.0
     @State private var tabBarOffset: CGFloat = 0
-    @StateObject private var dmManager: DirectMessagesManager
-    init() {
-        // Initialize managers
-        let nostrManager = NostrManager()
-        self._dmManager = StateObject(wrappedValue: DirectMessagesManager(nostrManager: nostrManager))
-    }
     var body: some View {
         TabView(selection: $selectedTab) {
             // Home Feed
@@ -21375,6 +20108,7 @@ struct MainTabView: View {
                 Label("Home", systemImage: selectedTab == 0 ? "house.fill" : "house")
             }
             .tag(0)
+            .accessibilityIdentifier("feedTab")
             // Explore/Search
             NavigationStack {
                 ExploreView()
@@ -21383,12 +20117,14 @@ struct MainTabView: View {
                 Label("Explore", systemImage: selectedTab == 1 ? "magnifyingglass.circle.fill" : "magnifyingglass")
             }
             .tag(1)
+            .accessibilityIdentifier("exploreTab")
             // Create Post - presented as sheet
             Color.clear
                 .tabItem {
                     Label("Create", systemImage: "plus.square")
                 }
                 .tag(2)
+                .accessibilityIdentifier("createTab")
                 .onAppear {
                     if selectedTab == 2 {
                         showCreatePost = true
@@ -21396,15 +20132,6 @@ struct MainTabView: View {
                         selectedTab = previousTab
                     }
                 }
-            // Messages Tab
-            NavigationStack {
-                MessagesListView(nostrManager: nostrManager)
-            }
-            .tabItem {
-                Label("Messages", systemImage: selectedTab == 3 ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
-            }
-            .tag(3)
-            .badge(dmManager.unreadCount > 0 ? "\(dmManager.unreadCount)" : nil)
             // Profile Tab with Wallet & Analytics Access
             Group {
                 if let session = nostrManager.authManager.activeSession {
@@ -21432,18 +20159,17 @@ struct MainTabView: View {
                 }
             }
             .tabItem {
-                Label("Profile", systemImage: selectedTab == 4 ? "person.circle.fill" : "person.circle")
+                Label("Profile", systemImage: selectedTab == 3 ? "person.circle.fill" : "person.circle")
             }
-            .tag(4)
+            .tag(3)
+            .accessibilityIdentifier("profileTab")
         }
+        .accessibilityIdentifier("mainTabBar")
         .tint(OlasDesign.Colors.primary)
         .onChange(of: selectedTab) { oldValue, newValue in
             if newValue != 2 {
                 previousTab = oldValue
             }
-        }
-        .task {
-            dmManager.startObservingMessages()
         }
         .sheet(isPresented: $showCreatePost) {
             CreatePostView()
@@ -25519,6 +24245,105 @@ final class OlasTests: XCTestCase {
 }
 </file>
 
+<file path=".gitignore">
+# Xcode
+#
+# gitignore contributors: remember to update Global/Xcode.gitignore, Objective-C.gitignore & Swift.gitignore
+
+## User settings
+xcuserdata/
+
+## compatibility with Xcode 8 and earlier (ignoring not required starting Xcode 9)
+*.xcscmblueprint
+*.xccheckout
+
+## compatibility with Xcode 3 and earlier (ignoring not required starting Xcode 4)
+build/
+DerivedData/
+*.moved-aside
+*.pbxuser
+!default.pbxuser
+*.mode1v3
+!default.mode1v3
+*.mode2v3
+!default.mode2v3
+*.perspectivev3
+!default.perspectivev3
+
+## Obj-C/Swift specific
+*.hmap
+
+## App packaging
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+## Playgrounds
+timeline.xctimeline
+playground.xcworkspace
+
+# Swift Package Manager
+#
+# Add this line if you want to avoid checking in source code from Swift Package Manager dependencies.
+# Packages/
+# Package.pins
+# Package.resolved
+# *.xcodeproj
+#
+# Xcode automatically generates this directory with a .xcworkspacedata file and xcuserdata
+# hence it is not needed unless you have added a package configuration file to your project
+# .swiftpm
+
+.build/
+
+# CocoaPods
+#
+# We recommend against adding the Pods directory to your .gitignore. However
+# you should judge for yourself, the pros and cons are mentioned at:
+# https://guides.cocoapods.org/using/using-cocoapods.html#should-i-check-the-pods-directory-into-source-control
+#
+# Pods/
+#
+# Add this line if you want to avoid checking in source code from the Xcode workspace
+# *.xcworkspace
+
+# Carthage
+#
+# Add this line if you want to avoid checking in source code from Carthage dependencies.
+# Carthage/Checkouts
+
+Carthage/Build/
+
+# Accio dependency management
+Dependencies/
+.accio/
+
+# fastlane
+#
+# It is recommended to not store the screenshots in the git repo.
+# Instead, use fastlane to re-generate the screenshots whenever they are needed.
+# For more information about the recommended setup visit:
+# https://docs.fastlane.tools/best-practices/source-control/#source-control
+
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+
+# Code Injection
+#
+# After new code Injection tools there's a generated folder /iOSInjectionProject
+# https://github.com/johnno1962/injectionforxcode
+
+iOSInjectionProject/
+
+# macOS
+.DS_Store
+
+# Test Results
+test-results/
+</file>
+
 <file path="build.sh">
 #!/bin/bash
 set -euo pipefail
@@ -25562,6 +24387,57 @@ echo -e "${GREEN}✅ Build completed successfully${NC}"
 #!/bin/bash
 cd "$(dirname "$0")/.."
 ./deploy-testflight.sh Olas
+</file>
+
+<file path="ExportOptions-TestFlight.plist">
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>destination</key>
+    <string>export</string>
+    <key>method</key>
+    <string>app-store</string>
+    <key>signingStyle</key>
+    <string>automatic</string>
+    <key>stripSwiftSymbols</key>
+    <true/>
+    <key>teamID</key>
+    <string>456SHKPP26</string>
+    <key>uploadBitcode</key>
+    <false/>
+    <key>uploadSymbols</key>
+    <true/>
+    <key>compileBitcode</key>
+    <false/>
+    <key>provisioningProfiles</key>
+    <dict/>
+</dict>
+</plist>
+</file>
+
+<file path="LICENSE">
+MIT License
+
+Copyright (c) 2025 Pablo Fernandez
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 </file>
 
 <file path="MODERNIZATION_SUMMARY.md">
@@ -26071,7 +24947,8 @@ settings:
     CURRENT_PROJECT_VERSION: "2"
 packages:
   NDKSwift:
-    path: ../../..
+    url: https://github.com/pablof7z/NDKSwift
+    branch: master
 targets:
   Olas:
     type: application
@@ -26101,6 +24978,7 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         SUPPORTS_MACCATALYST: false
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: false
+        SWIFT_VERSION: 5.9
 </file>
 
 <file path="refresh-project.sh">
@@ -26123,6 +25001,158 @@ fi
 xcodegen generate --spec project.yml
 echo -e "${GREEN}✅ Project refreshed! The .xcodeproj now includes all current files.${NC}"
 echo -e "${GREEN}   Code signing is configured from project.yml${NC}"
+</file>
+
+<file path="README.md">
+# Olas - Picture-First Decentralized Social Media
+
+<div align="center">
+  <img src="Resources/olas-icon.png" alt="Olas Logo" width="200"/>
+  
+  [![Platform](https://img.shields.io/badge/platform-iOS%2017%2B-lightgrey)](https://developer.apple.com/ios/)
+  [![Swift](https://img.shields.io/badge/Swift-5.9-orange)](https://swift.org)
+  [![NDKSwift](https://img.shields.io/badge/NDKSwift-0.2.0-blue)](https://github.com/pablof7z/NDKSwift)
+  [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+</div>
+
+## Overview
+
+Olas is a cutting-edge decentralized social media application built on the [Nostr protocol](https://nostr.com), designed with a strong emphasis on visual content sharing. It combines the power of decentralized social networking with professional-grade photo creation and editing tools, creating a unique platform for visual storytelling that is censorship-resistant and user-controlled.
+
+## Features
+
+### 📸 Picture-First Content Experience
+- **Visual Feed**: Dynamic image and video feed with progressive loading using Blurhash
+- **Multi-Image Posts**: Share multiple images in a single post
+- **Professional Camera**: In-app camera with timer, flash control, and composition grid
+- **Advanced Image Editor**: 12 custom filters and granular adjustments for brightness, contrast, saturation, and rotation
+- **Decentralized Storage**: Images uploaded to multiple Blossom servers using [NIP-92](https://github.com/nostr-protocol/nips/blob/master/92.md)
+
+### 🔐 Nostr-Native Social Features
+- **Self-Sovereign Identity**: Control your cryptographic keys (nsec/pubkey)
+- **Rich Interactions**: Likes, threaded replies ([NIP-22](https://github.com/nostr-protocol/nips/blob/master/22.md)), and Bitcoin Lightning zaps ([NIP-57](https://github.com/nostr-protocol/nips/blob/master/57.md))
+- **Rich Text Editor**: Real-time @mention suggestions and #hashtag autocomplete
+- **Encrypted DMs**: Private messaging with support for [NIP-44](https://github.com/nostr-protocol/nips/blob/master/44.md) encryption
+- **Ephemeral Stories**: 24-hour disappearing visual content
+
+### 🔍 Discovery & Exploration
+- **Explore Tab**: Masonry grid layout for content discovery
+- **Category Filtering**: Art, Photography, Nature, and other categories
+- **Trending Hashtags**: Real-time popularity indicators with velocity metrics
+- **Universal Search**: Find posts, hashtags, and users
+
+### ⚡ Integrated Bitcoin Lightning & Cashu Wallet
+- **NIP-60 Wallet**: Built-in support for Bitcoin Lightning and Cashu ecash
+- **Balance Management**: Visual breakdown of funds across multiple Cashu mints
+- **Seamless Transactions**: Send/receive sats via Lightning, ecash tokens, and Nostr zaps
+- **QR Code Scanner**: Easy payment processing
+- **Mint Management**: Add, remove, and monitor multiple Cashu mints
+
+### ⚙️ Comprehensive Settings & Customization
+- **Account Management**: Profile settings, key backup, biometric lock
+- **Relay Control**: Granular management of Nostr relay connections
+- **Notification Settings**: Customizable alerts with quiet hours
+- **Theme Customization**: Light/dark modes, accent colors, alternate app icons
+
+## Requirements
+
+- iOS 17.0+
+- Xcode 15.0+
+- Swift 5.9+
+
+## Installation
+
+### Building from Source
+
+1. Clone the repository:
+```bash
+git clone https://github.com/pablof7z/Olas-iOS.git
+cd Olas-iOS
+```
+
+2. Install XcodeGen if you haven't already:
+```bash
+brew install xcodegen
+```
+
+3. Generate the Xcode project:
+```bash
+./refresh-project.sh
+```
+
+4. Open the project in Xcode:
+```bash
+open Olas.xcodeproj
+```
+
+5. Build and run the project on your device or simulator
+
+### TestFlight
+
+Coming soon! We'll be releasing Olas on TestFlight for beta testing.
+
+## Development
+
+### Building
+
+```bash
+# Refresh project after file changes
+./refresh-project.sh
+
+# Build with clean output
+./build.sh
+
+# Build for specific device
+DESTINATION="platform=iOS Simulator,name=iPhone 16 Pro" ./build.sh
+```
+
+### Deploying to TestFlight
+
+```bash
+./deploy.sh
+```
+
+## Architecture
+
+Olas is built using modern iOS development technologies:
+
+- **SwiftUI** for the user interface
+- **NDKSwift** for Nostr protocol interactions
+- **Core Image** for advanced photo editing
+- **AVFoundation** for camera functionality
+- **SwiftData** for local storage
+- **Combine** for reactive programming
+
+## Contributing
+
+We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- Built with [NDKSwift](https://github.com/pablof7z/NDKSwift)
+- Uses the [Nostr Protocol](https://nostr.com)
+- Integrates [Cashu](https://cashu.space) for ecash functionality
+
+## Contact
+
+- Nostr: `npub1l2vyh47mk2p0qlsku7hg0vn29faehy9hy34ygaclpn66ukqp3afqutajft`
+- GitHub: [@pablof7z](https://github.com/pablof7z)
+
+---
+
+<div align="center">
+  Made with ❤️ for the decentralized future
+</div>
 </file>
 
 </files>

@@ -1,0 +1,45 @@
+appId: com.olas.app
+---
+# Account Creation Test for Olas
+
+- clearState
+- launchApp
+- waitForAnimationToEnd
+
+# Step 1: Start from authentication screen
+- assertVisible: "Olas"
+- assertVisible: "Welcome back"
+- tapOn: "I'm New Here"
+- waitForAnimationToEnd
+
+# Step 2: Navigate through onboarding
+# Page 1 - Welcome
+- assertVisible: "Picture-First Social"
+- swipe:
+    direction: LEFT
+- waitForAnimationToEnd
+
+# Page 2 - Nostr Explainer  
+- assertVisible: "Your Content, Everywhere"
+- swipe:
+    direction: LEFT
+- waitForAnimationToEnd
+
+# Page 3 - Key Generation (automatic)
+- assertVisible: "Creating Your Identity"
+- waitForAnimationToEnd:
+    timeout: 5000
+- swipe:
+    direction: LEFT
+- waitForAnimationToEnd
+
+# Page 4 - Security Education
+- assertVisible: "Your Keys, Your Control"
+- tapOn: "Get Started"
+
+# Step 3: Wait for account creation
+- waitForAnimationToEnd:
+    timeout: 15000
+
+# Step 4: Verify we're in the main app
+- assertVisible: "Olas"

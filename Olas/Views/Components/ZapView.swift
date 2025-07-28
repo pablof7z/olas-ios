@@ -137,11 +137,11 @@ struct ZapView: View {
                         },
                         style: .primary,
                         isLoading: isLoading,
-                        isDisabled: !walletManager.isWalletConfigured || selectedAmount > walletManager.currentBalance
+                        isDisabled: !walletConfigured || Int64(selectedAmount) > currentBalance
                     )
                     
-                    if walletManager.isWalletConfigured {
-                        Text("Balance: \(formatSats(walletManager.currentBalance)) sats")
+                    if walletConfigured {
+                        Text("Balance: \(formatSats(currentBalance)) sats")
                             .font(OlasDesign.Typography.caption)
                             .foregroundStyle(OlasDesign.Colors.textSecondary)
                     }
@@ -173,6 +173,7 @@ struct ZapView: View {
         .task {
             await fetchRecipientInfo()
             await loadWallet()
+            await updateWalletStatus()
         }
     }
     
@@ -221,33 +222,61 @@ struct ZapView: View {
         }
     }
     
-    private func sendZap() async {
-        guard walletManager.isWalletConfigured else {
-            errorMessage = "Wallet not configured. Go to Wallet tab to set it up."
-            return
-        }
-        
-        let zapAmount = Int64(selectedAmount)
-        guard zapAmount <= walletManager.currentBalance else {
-            errorMessage = "Insufficient balance"
-            OlasDesign.Haptic.error()
-            return
-        }
+    @State private var walletConfigured = false
+    @State private var currentBalance: Int64 = 0
+    
+    private func updateWalletStatus() async {
+        let configured = await walletManager.isWalletConfigured
+        let balance = await walletManager.currentBalance
         
         await MainActor.run {
+            walletConfigured = configured
+            currentBalance = balance
+        }
+    }
+    
+    private func sendZap() async {
+        await updateWalletStatus()
+        
+        await MainActor.run {
+            guard walletConfigured else {
+                errorMessage = "Wallet not configured. Go to Wallet tab to set it up."
+                return
+            }
+            
+            let zapAmount = Int64(selectedAmount)
+            guard zapAmount <= currentBalance else {
+                errorMessage = "Insufficient balance"
+                OlasDesign.Haptic.error()
+                return
+            }
+            
             isLoading = true
             errorMessage = nil
         }
         
         do {
-            try await walletManager.zapEvent(
-                event,
-                amount: zapAmount,
+            guard let ndk = nostrManager.ndk else {
+                await MainActor.run {
+                    errorMessage = "NDK not available"
+                    isLoading = false
+                }
+                return
+            }
+            
+            let zapAmount = Int64(selectedAmount)
+            let author = NDKUser(pubkey: event.pubkey)
+            author.ndk = ndk
+            
+            _ = try await event.zap(
+                with: ndk,
+                amountSats: zapAmount,
                 comment: comment.isEmpty ? nil : comment
             )
             
             await MainActor.run {
                 showingSuccess = true
+                isLoading = false
                 OlasDesign.Haptic.success()
             }
         } catch {

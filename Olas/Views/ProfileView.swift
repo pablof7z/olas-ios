@@ -146,7 +146,7 @@ struct ProfileHeaderView: View {
                 
                 // Name and username
                 VStack(spacing: 4) {
-                    Text(profile?.displayName ?? profile?.name ?? "Loading...")
+                    Text(profile?.displayName ?? profile?.name ?? String(pubkey.prefix(8)) + "...")
                         .font(OlasDesign.Typography.title)
                         .foregroundColor(OlasDesign.Colors.text)
                         .olasTextShadow()

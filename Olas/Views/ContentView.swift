@@ -4,7 +4,6 @@ import NDKSwift
 struct ContentView: View {
     @Environment(NostrManager.self) private var nostrManager
     @EnvironmentObject var appState: AppState
-    @EnvironmentObject var blossomServerManager: BlossomServerManager
     
     var body: some View {
         Group {

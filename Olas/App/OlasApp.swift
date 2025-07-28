@@ -5,13 +5,11 @@ import NDKSwift
 struct OlasApp: App {
     @State private var nostrManager: NostrManager
     @StateObject private var appState = AppState()
-    @StateObject private var blossomServerManager: BlossomServerManager
     
     init() {
         let manager = NostrManager()
         self._nostrManager = State(initialValue: manager)
         self._appState = StateObject(wrappedValue: AppState())
-        self._blossomServerManager = StateObject(wrappedValue: BlossomServerManager(ndk: manager.ndk))
     }
     
     var body: some Scene {
@@ -19,7 +17,6 @@ struct OlasApp: App {
             ContentView()
                 .environment(nostrManager)
                 .environmentObject(appState)
-                .environmentObject(blossomServerManager)
                 .preferredColorScheme(.dark)
         }
     }

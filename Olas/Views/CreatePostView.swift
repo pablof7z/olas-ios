@@ -12,7 +12,6 @@ import AppKit
 struct CreatePostView: View {
     @Environment(NostrManager.self) private var nostrManager
     @EnvironmentObject var appState: AppState
-    @EnvironmentObject var blossomServerManager: BlossomServerManager
     @Environment(\.dismiss) var dismiss
     
     // Photo selection

@@ -5,10 +5,6 @@ struct FeedView: View {
     @Environment(NostrManager.self) private var nostrManager
     @EnvironmentObject var appState: AppState
     @StateObject private var viewModel = FeedViewModel()
-    @State private var hasAppeared = false
-    @State private var showLiveIndicator = false
-    @State private var newPostsCount = 0
-    @State private var pulseAnimation = false
     @Namespace private var animation
     
     var body: some View {
@@ -22,15 +18,13 @@ struct FeedView: View {
                 OlasDesign.Colors.background
                     .ignoresSafeArea()
                 
-                if viewModel.items.isEmpty && viewModel.isLoading {
-                    // Loading state
-                    loadingView
-                } else if viewModel.items.isEmpty {
-                    // Empty state
-                    emptyStateView
-                } else {
-                    // Feed content
-                    ScrollView {
+                // Always show the scroll view immediately - never wait
+                ScrollView {
+                    if viewModel.items.isEmpty {
+                        // Empty state - show immediately while data streams in
+                        emptyStateView
+                            .padding(.top, 100)
+                    } else {
                         LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                             // Stories section
                             Section {
@@ -39,18 +33,6 @@ struct FeedView: View {
                                 VStack(spacing: 0) {
                                     StoriesView()
                                         .background(OlasDesign.Colors.background)
-                                    
-                                    // Live updates indicator
-                                    if showLiveIndicator {
-                                        LiveUpdatesIndicator(newPostsCount: $newPostsCount)
-                                            .transition(.asymmetric(
-                                                insertion: .push(from: .top).combined(with: .opacity),
-                                                removal: .push(from: .top).combined(with: .opacity)
-                                            ))
-                                            .onTapGesture {
-                                                loadPendingItems()
-                                            }
-                                    }
                                 }
                             }
                             
@@ -62,13 +44,6 @@ struct FeedView: View {
                                         insertion: .move(edge: .bottom).combined(with: .opacity),
                                         removal: .move(edge: .top).combined(with: .opacity)
                                     ))
-                                    .scaleEffect(hasAppeared ? 1 : 0.95)
-                                    .opacity(hasAppeared ? 1 : 0)
-                                    .animation(
-                                        .spring(response: 0.5, dampingFraction: 0.8)
-                                        .delay(Double(min(index, 10)) * 0.05),
-                                        value: hasAppeared
-                                    )
                                 
                                 if index < viewModel.items.count - 1 {
                                     Rectangle()
@@ -87,33 +62,8 @@ struct FeedView: View {
             #endif
             .toolbar {
                 #if os(iOS)
-                ToolbarItem(placement: .navigationBarLeading) {
-                    // Live indicator in toolbar
-                    if viewModel.isLive {
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(Color.green)
-                                .frame(width: 8, height: 8)
-                                .overlay(
-                                    Circle()
-                                        .stroke(Color.green.opacity(0.3), lineWidth: 8)
-                                        .scaleEffect(pulseAnimation ? 2 : 1)
-                                        .opacity(pulseAnimation ? 0 : 1)
-                                        .animation(.easeOut(duration: 1.5).repeatForever(autoreverses: false), value: pulseAnimation)
-                                )
-                            
-                            Text("LIVE")
-                                .font(.system(size: 12, weight: .bold, design: .rounded))
-                                .foregroundColor(.green)
-                        }
-                        .onAppear { pulseAnimation = true }
-                    }
-                }
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
-                #else
-                ToolbarItem(placement: .automatic) {
-                #endif
                     NavigationLink(destination: CreatePostView()) {
                         Image(systemName: "camera.fill")
                             .onTapGesture {
@@ -128,6 +78,7 @@ struct FeedView: View {
                             )
                     }
                 }
+                #endif
             }
             .refreshable {
                 await handleRefresh()
@@ -136,71 +87,27 @@ struct FeedView: View {
                 if let ndk = nostrManager.ndk {
                     viewModel.startFeed(with: ndk)
                 }
-                
-                // Trigger staggered animations
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    withAnimation {
-                        hasAppeared = true
-                    }
-                }
             }
             .onChange(of: viewModel.pendingItemsCount) { _, newValue in
-                if newValue > 0 {
-                    withAnimation(.spring()) {
-                        showLiveIndicator = true
-                        newPostsCount = newValue
-                    }
-                } else {
-                    withAnimation(.spring()) {
-                        showLiveIndicator = false
-                    }
-                }
+                // Removed live indicator logic
             }
         }
-    }
-    
-    private var loadingView: some View {
-        VStack(spacing: OlasDesign.Spacing.lg) {
-            ForEach(0..<5) { index in
-                FeedItemSkeletonView()
-                    .opacity(0.7)
-                    .scaleEffect(hasAppeared ? 1 : 0.95)
-                    .animation(
-                        .easeInOut(duration: 0.5)
-                        .delay(Double(index) * 0.1),
-                        value: hasAppeared
-                    )
-            }
-        }
-        .padding(.horizontal, OlasDesign.Spacing.md)
     }
     
     private var emptyStateView: some View {
-        EmptyFeedView(hasAppeared: hasAppeared)
+        EmptyFeedView()
     }
     
     private func handleRefresh() async {
         #if os(iOS)
         OlasDesign.Haptic.impact(.medium)
-        #else
-        OlasDesign.Haptic.impact(0)
         #endif
-        hasAppeared = false
         await viewModel.refresh()
-        
-        // Re-trigger animations
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            withAnimation {
-                hasAppeared = true
-            }
-        }
     }
     
     private func loadPendingItems() {
         withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
             viewModel.loadPendingItems()
-            showLiveIndicator = false
-            newPostsCount = 0
         }
         
         // Haptic feedback
@@ -238,7 +145,7 @@ struct FeedItemView: View {
                         
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 4) {
-                                Text(item.profile?.displayName ?? item.profile?.name ?? "Loading...")
+                                Text(item.profile?.displayName ?? item.profile?.name ?? String(item.event.pubkey.prefix(8)) + "...")
                                     .font(OlasDesign.Typography.bodyMedium)
                                     .foregroundColor(OlasDesign.Colors.text)
                                     .olasTextShadow()
@@ -539,31 +446,22 @@ struct FeedItemView: View {
 class FeedViewModel: ObservableObject {
     @Published var items: [FeedItem] = []
     @Published var pendingItems: [FeedItem] = []
-    @Published var isLoading = true
-    @Published var isLive = false
     @Published var pendingItemsCount = 0
     private var profileTasks: [String: Task<Void, Never>] = [:]
     private var feedTask: Task<Void, Never>?
     private var engagementTasks: [String: Task<Void, Never>] = [:]
-    private var lastEventTime: Date?
+    private var lastEventTime: Timestamp?
     
     func startFeed(with ndk: NDK) {
         // Cancel any existing feed task
         feedTask?.cancel()
         
-        isLoading = true
+        // Start live immediately - no loading states
         
         feedTask = Task {
-            // Simulate loading for smooth animation
-            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
             
-            await MainActor.run {
-                self.isLoading = false
-                self.isLive = true
-            }
-            
-            // Subscribe to both picture posts (NIP-68) and text posts with images
-            let filter = NDKFilter(kinds: [EventKind.image, EventKind.textNote], limit: 100)
+            // Subscribe to kind 20 picture posts (NIP-68)
+            let filter = NDKFilter(kinds: [20], limit: 100)
             
             // Create data source using observe with reactive pattern
             let dataSource = ndk.observe(
@@ -573,11 +471,8 @@ class FeedViewModel: ObservableObject {
             )
             
             for await event in dataSource.events {
-                // Check if this is an image post or text post with images
-                let isImagePost = event.kind == EventKind.image
-                let hasImages = event.kind == EventKind.textNote && containsImageURL(event.content)
-                
-                if isImagePost || hasImages {
+                // Process kind 20 events which use imeta tags
+                if event.kind == 20 {
                     let feedItem = FeedItem(from: event)
                     
                     await MainActor.run {
@@ -653,28 +548,6 @@ class FeedViewModel: ObservableObject {
         }
     }
     
-    private func containsImageURL(_ content: String) -> Bool {
-        // Simple check for image URLs
-        let imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"]
-        let lowercased = content.lowercased()
-        
-        // Check for direct image URLs
-        for ext in imageExtensions {
-            if lowercased.contains(ext) {
-                return true
-            }
-        }
-        
-        // Check for common image hosting services
-        let imageHosts = ["imgur.com", "i.imgur.com", "nostr.build", "void.cat", "imgprxy.stacker.news"]
-        for host in imageHosts {
-            if lowercased.contains(host) {
-                return true
-            }
-        }
-        
-        return false
-    }
     
     func refresh() async {
         // Clear items and restart subscription
@@ -723,7 +596,9 @@ class FeedViewModel: ObservableObject {
             // Observe reactions (kind 7)
             let reactionsFilter = NDKFilter(
                 kinds: [7],
-                events: [eventId]
+                tags: [
+                    "e": [eventId]
+                ]
             )
             
             let reactionsDataSource = ndk.observe(
@@ -843,7 +718,7 @@ struct FeedItem: Identifiable {
         // Extract images and blurhashes from imeta tags (NIP-68 requires imeta tags)
         self.imageURLs = event.imageURLs
         
-        // Extract blurhashes from imeta tags
+        // Extract blurhashes specifically from imeta tags, as NDKEvent.imageURLs only provides the URLs
         var hashes: [String] = []
         for tag in event.tags where tag.count >= 1 && tag[0] == "imeta" {
             var blurhash: String?
@@ -870,155 +745,10 @@ struct FeedItem: Identifiable {
         self.blurhashes = hashes
     }
     
-    static func extractImageURLs(from content: String) -> [String] {
-        var urls: [String] = []
-        
-        // Regular expression to find URLs
-        let urlPattern = #"https?://[^\s<>"{}|\\^\[\]`]+"#
-        
-        do {
-            let regex = try NSRegularExpression(pattern: urlPattern, options: [])
-            let matches = regex.matches(in: content, options: [], range: NSRange(content.startIndex..., in: content))
-            
-            for match in matches {
-                if let range = Range(match.range, in: content) {
-                    let urlString = String(content[range])
-                    
-                    // Check if it's an image URL
-                    let imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"]
-                    let lowercasedURL = urlString.lowercased()
-                    
-                    // Check for direct image extensions
-                    if imageExtensions.contains(where: { lowercasedURL.contains($0) }) {
-                        urls.append(urlString)
-                        continue
-                    }
-                    
-                    // Check for image hosting services
-                    let imageHosts = ["imgur.com", "i.imgur.com", "nostr.build", "void.cat", "imgprxy.stacker.news"]
-                    if imageHosts.contains(where: { lowercasedURL.contains($0) }) {
-                        urls.append(urlString)
-                    }
-                }
-            }
-        } catch {
-            print("Error extracting URLs: \(error)")
-        }
-        
-        return urls
-    }
-    
-    static func extractImagesFromEvent(_ event: NDKEvent) -> [String] {
-        // Use NDKSwift's built-in imeta support
-        return event.imageURLs
-    }
-    
-    private static func isImageURL(_ url: String) -> Bool {
-        let imageExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic"]
-        let lowercasedURL = url.lowercased()
-        
-        // Check for direct image extensions
-        if imageExtensions.contains(where: { lowercasedURL.contains($0) }) {
-            return true
-        }
-        
-        // Check for image hosting services
-        let imageHosts = ["imgur.com", "i.imgur.com", "nostr.build", "void.cat", "imgprxy.stacker.news"]
-        return imageHosts.contains(where: { lowercasedURL.contains($0) })
-    }
-}
-
-// MARK: - Feed Item Skeleton
-struct FeedItemSkeletonView: View {
-    @State private var shimmerAnimation = false
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Header skeleton
-            HStack(spacing: OlasDesign.Spacing.md) {
-                Circle()
-                    .fill(OlasDesign.Colors.surface)
-                    .overlay(shimmerGradient)
-                    .frame(width: 40, height: 40)
-                
-                VStack(alignment: .leading, spacing: OlasDesign.Spacing.xs) {
-                    RoundedRectangle(cornerRadius: OlasDesign.CornerRadius.xs)
-                        .fill(OlasDesign.Colors.surface)
-                        .overlay(shimmerGradient)
-                        .frame(width: 120, height: 14)
-                    
-                    RoundedRectangle(cornerRadius: OlasDesign.CornerRadius.xs)
-                        .fill(OlasDesign.Colors.surface)
-                        .overlay(shimmerGradient)
-                        .frame(width: 80, height: 12)
-                }
-                
-                Spacer()
-            }
-            .padding(.horizontal, OlasDesign.Spacing.md)
-            .padding(.vertical, OlasDesign.Spacing.md)
-            
-            // Image skeleton
-            Rectangle()
-                .fill(OlasDesign.Colors.surface)
-                .overlay(shimmerGradient)
-                .aspectRatio(4/5, contentMode: .fit)
-            
-            // Actions skeleton
-            HStack(spacing: OlasDesign.Spacing.xl) {
-                ForEach(0..<4) { _ in
-                    Circle()
-                        .fill(OlasDesign.Colors.surface)
-                        .overlay(shimmerGradient)
-                        .frame(width: 24, height: 24)
-                }
-                Spacer()
-            }
-            .padding(.horizontal, OlasDesign.Spacing.md)
-            .padding(.vertical, OlasDesign.Spacing.md)
-            
-            // Content skeleton
-            VStack(alignment: .leading, spacing: OlasDesign.Spacing.sm) {
-                RoundedRectangle(cornerRadius: OlasDesign.CornerRadius.xs)
-                    .fill(OlasDesign.Colors.surface)
-                    .overlay(shimmerGradient)
-                    .frame(height: 14)
-                
-                RoundedRectangle(cornerRadius: OlasDesign.CornerRadius.xs)
-                    .fill(OlasDesign.Colors.surface)
-                    .overlay(shimmerGradient)
-                    .frame(width: 200, height: 14)
-            }
-            .padding(.horizontal, OlasDesign.Spacing.md)
-            .padding(.bottom, OlasDesign.Spacing.md)
-        }
-        .background(OlasDesign.Colors.background)
-        .onAppear {
-            withAnimation(.linear(duration: 1.5).repeatForever(autoreverses: false)) {
-                shimmerAnimation = true
-            }
-        }
-    }
-    
-    private var shimmerGradient: some View {
-        LinearGradient(
-            colors: [
-                Color.white.opacity(0),
-                Color.white.opacity(0.1),
-                Color.white.opacity(0)
-            ],
-            startPoint: .leading,
-            endPoint: .trailing
-        )
-        .rotationEffect(.degrees(30))
-        .offset(x: shimmerAnimation ? 300 : -300)
-        .transition(.move(edge: .leading))
-    }
 }
 
 // MARK: - Empty Feed View
 struct EmptyFeedView: View {
-    let hasAppeared: Bool
     @State private var pulseAnimation = false
     
     var body: some View {
@@ -1060,9 +790,6 @@ struct EmptyFeedView: View {
                         value: pulseAnimation
                     )
             }
-            .scaleEffect(hasAppeared ? 1 : 0.5)
-            .opacity(hasAppeared ? 1 : 0)
-            .animation(.spring(response: 0.6, dampingFraction: 0.8), value: hasAppeared)
             
             VStack(spacing: OlasDesign.Spacing.md) {
                 Text("Your Feed is Empty")
@@ -1074,9 +801,6 @@ struct EmptyFeedView: View {
                     .foregroundStyle(.white.opacity(0.7))
                     .multilineTextAlignment(.center)
             }
-            .opacity(hasAppeared ? 1 : 0)
-            .offset(y: hasAppeared ? 0 : 20)
-            .animation(.easeOut(duration: 0.6).delay(0.2), value: hasAppeared)
             
             VStack(spacing: OlasDesign.Spacing.md) {
                 Button {
@@ -1119,9 +843,6 @@ struct EmptyFeedView: View {
                         .foregroundStyle(.white.opacity(0.8))
                 }
             }
-            .scaleEffect(hasAppeared ? 1 : 0.8)
-            .opacity(hasAppeared ? 1 : 0)
-            .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.4), value: hasAppeared)
             
             Spacer()
             Spacer()
@@ -1220,4 +941,4 @@ struct LikeAnimationView: View {
             hearts.append(heart)
         }
     }
-}}
+}

@@ -1,0 +1,37 @@
+appId: com.olas.app
+---
+- clearState
+- launchApp
+- waitForAnimationToEnd:
+    timeout: 5000
+
+# Take a screenshot to see what's displayed
+- takeScreenshot: "initial_screen"
+
+# Try to find what screen we're on
+- runFlow:
+    when:
+      visible: "Welcome back"
+    commands:
+      - takeScreenshot: "auth_screen"
+      - extendedWaitUntil:
+          visible: "Welcome back"
+          timeout: 1000
+
+- runFlow:
+    when:
+      visible: "Picture-First Social"
+    commands:
+      - takeScreenshot: "onboarding_screen"
+      - extendedWaitUntil:
+          visible: "Picture-First Social"
+          timeout: 1000
+
+- runFlow:
+    when:
+      visible: "Olas"
+    commands:
+      - takeScreenshot: "has_olas_text"
+      - extendedWaitUntil:
+          visible: "Olas"
+          timeout: 1000

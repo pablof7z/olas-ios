@@ -1,0 +1,20 @@
+# Maestro Configuration for Olas
+
+# Test Tags - useful for organizing and filtering tests
+tags:
+  - auth
+  - onboarding
+  - account
+
+# Environment variables (if needed)
+env:
+  APP_ID: com.olas.app
+  
+# Global test configuration
+testExecutionOrder: sequential
+
+# Test flows
+flows:
+  - create_account_test.yaml
+  - login_with_nsec_test.yaml
+  - login_with_hex_test.yaml
