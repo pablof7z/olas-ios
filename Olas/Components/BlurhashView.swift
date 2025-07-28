@@ -44,8 +44,8 @@ struct BlurhashView: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                Color(.systemGray5),
-                                Color(.systemGray6)
+                                Color.gray.opacity(0.2),
+                                Color.gray.opacity(0.1)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -151,14 +151,14 @@ struct OlasProgressiveImage: View {
                     #if os(iOS)
                     SwiftUI.Image(uiImage: lowQualityImage)
                         .resizable()
-                        .aspectRatio(contentMode: .fill)
+                        .aspectRatio(contentMode: .fit)
                         .opacity(phase == .lowQuality && !showHighQuality ? 1 : 0)
                         .animation(.easeOut(duration: 0.3), value: phase)
                         .animation(.easeOut(duration: 0.3), value: showHighQuality)
                     #else
                     SwiftUI.Image(nsImage: lowQualityImage)
                         .resizable()
-                        .aspectRatio(contentMode: .fill)
+                        .aspectRatio(contentMode: .fit)
                         .opacity(phase == .lowQuality && !showHighQuality ? 1 : 0)
                         .animation(.easeOut(duration: 0.3), value: phase)
                         .animation(.easeOut(duration: 0.3), value: showHighQuality)
@@ -170,13 +170,13 @@ struct OlasProgressiveImage: View {
                     #if os(iOS)
                     SwiftUI.Image(uiImage: highQualityImage)
                         .resizable()
-                        .aspectRatio(contentMode: .fill)
+                        .aspectRatio(contentMode: .fit)
                         .opacity(showHighQuality ? 1 : 0)
                         .animation(.easeOut(duration: 0.5), value: showHighQuality)
                     #else
                     SwiftUI.Image(nsImage: highQualityImage)
                         .resizable()
-                        .aspectRatio(contentMode: .fill)
+                        .aspectRatio(contentMode: .fit)
                         .opacity(showHighQuality ? 1 : 0)
                         .animation(.easeOut(duration: 0.5), value: showHighQuality)
                     #endif
@@ -211,25 +211,25 @@ struct OlasProgressiveImage: View {
         
         guard let url = URL(string: imageURL) else { return }
         
-        // Load low quality version first
+        // Load low quality version first (smaller scale)
         Task {
-            await loadLowQuality(from: url, targetSize: CGSize(width: size.width * 0.25, height: size.height * 0.25))
+            await loadLowQuality(from: url, maxSize: CGSize(width: size.width * 0.3, height: size.height * 0.3))
         }
         
-        // Then load high quality
+        // Then load high quality (preserve original size within bounds)
         Task {
-            await loadHighQuality(from: url, targetSize: size)
+            await loadHighQuality(from: url, maxSize: size)
         }
     }
     
-    private func loadLowQuality(from url: URL, targetSize: CGSize) async {
+    private func loadLowQuality(from url: URL, maxSize: CGSize) async {
         // Simulate progressive loading with URLSession
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
             
             #if os(iOS)
             if let image = UIImage(data: data) {
-                let resized = await resizeImage(image, to: targetSize)
+                let resized = await resizeImageToFit(image, maxSize: maxSize)
                 
                 await MainActor.run {
                     self.lowQualityImage = resized
@@ -238,7 +238,7 @@ struct OlasProgressiveImage: View {
             }
             #else
             if let image = NSImage(data: data) {
-                let resized = await resizeImage(image, to: targetSize)
+                let resized = await resizeImageToFit(image, maxSize: maxSize)
                 
                 await MainActor.run {
                     self.lowQualityImage = resized
@@ -251,13 +251,13 @@ struct OlasProgressiveImage: View {
         }
     }
     
-    private func loadHighQuality(from url: URL, targetSize: CGSize) async {
+    private func loadHighQuality(from url: URL, maxSize: CGSize) async {
         do {
             let (data, _) = try await URLSession.shared.data(from: url)
             
             #if os(iOS)
             if let image = UIImage(data: data) {
-                let resized = await resizeImage(image, to: targetSize)
+                let resized = await resizeImageToFit(image, maxSize: maxSize)
                 
                 await MainActor.run {
                     self.highQualityImage = resized
@@ -271,7 +271,7 @@ struct OlasProgressiveImage: View {
             }
             #else
             if let image = NSImage(data: data) {
-                let resized = await resizeImage(image, to: targetSize)
+                let resized = await resizeImageToFit(image, maxSize: maxSize)
                 
                 await MainActor.run {
                     self.highQualityImage = resized
@@ -290,26 +290,46 @@ struct OlasProgressiveImage: View {
     }
     
     #if os(iOS)
-    private func resizeImage(_ image: UIImage, to size: CGSize) async -> UIImage? {
+    private func resizeImageToFit(_ image: UIImage, maxSize: CGSize) async -> UIImage? {
         return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                let renderer = UIGraphicsImageRenderer(size: size)
-                let resized = renderer.image { context in
-                    image.draw(in: CGRect(origin: .zero, size: size))
+                let originalSize = image.size
+                let scale = min(maxSize.width / originalSize.width, maxSize.height / originalSize.height)
+                
+                // Only downscale if the image is larger than maxSize
+                if scale < 1.0 {
+                    let newSize = CGSize(width: originalSize.width * scale, height: originalSize.height * scale)
+                    let renderer = UIGraphicsImageRenderer(size: newSize)
+                    let resized = renderer.image { context in
+                        image.draw(in: CGRect(origin: .zero, size: newSize))
+                    }
+                    continuation.resume(returning: resized)
+                } else {
+                    // Return original image if it's already smaller than maxSize  
+                    continuation.resume(returning: image)
                 }
-                continuation.resume(returning: resized)
             }
         }
     }
     #else
-    private func resizeImage(_ image: NSImage, to size: CGSize) async -> NSImage? {
+    private func resizeImageToFit(_ image: NSImage, maxSize: CGSize) async -> NSImage? {
         return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                let resized = NSImage(size: size)
-                resized.lockFocus()
-                image.draw(in: NSRect(origin: .zero, size: size))
-                resized.unlockFocus()
-                continuation.resume(returning: resized)
+                let originalSize = image.size
+                let scale = min(maxSize.width / originalSize.width, maxSize.height / originalSize.height)
+                
+                // Only downscale if the image is larger than maxSize
+                if scale < 1.0 {
+                    let newSize = CGSize(width: originalSize.width * scale, height: originalSize.height * scale)
+                    let resized = NSImage(size: newSize)
+                    resized.lockFocus()
+                    image.draw(in: NSRect(origin: .zero, size: newSize))
+                    resized.unlockFocus()
+                    continuation.resume(returning: resized)
+                } else {
+                    // Return original image if it's already smaller than maxSize
+                    continuation.resume(returning: image)
+                }
             }
         }
     }

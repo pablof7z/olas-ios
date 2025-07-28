@@ -1,5 +1,16 @@
 import SwiftUI
 
+// MARK: - View Extension for Conditional Modifiers
+extension View {
+    @ViewBuilder func `if`<Content: View>(_ condition: Bool, transform: (Self) -> Content) -> some View {
+        if condition {
+            transform(self)
+        } else {
+            self
+        }
+    }
+}
+
 // MARK: - Multi-Image Layout Component
 
 struct OlasMultiImageView: View {
@@ -30,7 +41,6 @@ struct OlasMultiImageView: View {
                 EmptyView()
             }
         }
-        .aspectRatio(4/5, contentMode: .fit)
         .background(OlasDesign.Colors.background)
     }
     
@@ -38,7 +48,9 @@ struct OlasMultiImageView: View {
     
     @ViewBuilder
     private func singleImageLayout(width: CGFloat) -> some View {
-        imageView(for: imageURLs[0], aspectRatio: 4/5)
+        imageView(for: imageURLs[0], aspectRatio: nil)
+            .aspectRatio(contentMode: .fit)
+            .frame(maxHeight: width * 1.25) // Max height of 5:4 ratio
     }
     
     @ViewBuilder
@@ -47,6 +59,7 @@ struct OlasMultiImageView: View {
             imageView(for: imageURLs[0], aspectRatio: 8/9)
             imageView(for: imageURLs[1], aspectRatio: 8/9)
         }
+        .aspectRatio(16/9, contentMode: .fit)
     }
     
     @ViewBuilder
@@ -63,6 +76,7 @@ struct OlasMultiImageView: View {
             }
             .frame(width: width * 0.4 - 1)
         }
+        .aspectRatio(4/3, contentMode: .fit)
     }
     
     @ViewBuilder
@@ -95,12 +109,13 @@ struct OlasMultiImageView: View {
                 }
             }
         }
+        .aspectRatio(1, contentMode: .fit)
     }
     
     // MARK: - Image View Builder
     
     @ViewBuilder
-    private func imageView(for urlString: String, aspectRatio: CGFloat) -> some View {
+    private func imageView(for urlString: String, aspectRatio: CGFloat?) -> some View {
         if let index = imageURLs.firstIndex(of: urlString) {
             let blurhash = index < blurhashes.count ? blurhashes[index] : nil
             
@@ -108,7 +123,12 @@ struct OlasMultiImageView: View {
                 imageURL: urlString,
                 blurhash: blurhash?.isEmpty == false ? blurhash : nil
             )
-            .aspectRatio(aspectRatio, contentMode: .fill)
+            .if(aspectRatio != nil) { view in
+                view.aspectRatio(aspectRatio!, contentMode: .fill)
+            }
+            .if(aspectRatio == nil) { view in
+                view.aspectRatio(contentMode: .fit)
+            }
             .clipped()
         }
     }
