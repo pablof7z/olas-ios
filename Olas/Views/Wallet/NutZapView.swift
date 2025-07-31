@@ -2,7 +2,6 @@ import SwiftUI
 import NDKSwift
 
 struct NutZapView: View {
-    @ObservedObject var walletManager: OlasWalletManager
     let nostrManager: NostrManager
     let recipientPubkey: String?
     
@@ -11,7 +10,7 @@ struct NutZapView: View {
     @State private var comment: String = ""
     @State private var isSearching = false
     @State private var searchQuery = ""
-    @State private var selectedUser: NDKUserProfile?
+    @State private var selectedUser: NDKUserMetadata?
     @State private var selectedUserPubkey: String?
     @State private var isSending = false
     @State private var showSuccess = false
@@ -35,7 +34,11 @@ struct NutZapView: View {
             }
             .task {
                 // Load current balance
-                currentBalance = await walletManager.currentBalance
+                guard let wallet = nostrManager.cashuWallet else {
+                    currentBalance = 0
+                    return
+                }
+                currentBalance = (try? await wallet.getBalance()) ?? 0
                 
                 if let pubkey = recipientPubkey {
                     await loadUserProfile(pubkey: pubkey)
@@ -123,8 +126,8 @@ struct NutZapView: View {
         Group {
             if recipientPubkey == nil {
                 recipientSelector
-            } else if let userProfile = selectedUser {
-                selectedRecipientCard(profile: userProfile, pubkey: recipientPubkey!)
+            } else if let userMetadata = selectedUser {
+                selectedRecipientCard(metadata: userMetadata, pubkey: recipientPubkey!)
             }
         }
     }
@@ -170,10 +173,10 @@ struct NutZapView: View {
         }
     }
     
-    private func selectedRecipientCard(profile: NDKUserProfile, pubkey: String) -> some View {
+    private func selectedRecipientCard(metadata: NDKUserMetadata, pubkey: String) -> some View {
         HStack(spacing: OlasDesign.Spacing.md) {
             // Avatar
-            if let avatarURL = profile.picture {
+            if let avatarURL = metadata.picture {
                 AsyncImage(url: URL(string: avatarURL)) { image in
                     image
                         .resizable()
@@ -182,7 +185,7 @@ struct NutZapView: View {
                     Circle()
                         .fill(OlasDesign.Colors.surface)
                         .overlay(
-                            Text((profile.displayName ?? profile.name ?? "?").prefix(1))
+                            Text((metadata.displayName ?? metadata.name ?? "?").prefix(1))
                                 .font(OlasDesign.Typography.bodyMedium)
                                 .foregroundStyle(OlasDesign.Colors.textSecondary)
                         )
@@ -192,11 +195,11 @@ struct NutZapView: View {
             }
             
             VStack(alignment: .leading, spacing: 4) {
-                Text(profile.displayName ?? profile.name ?? "Anonymous")
+                Text(metadata.displayName ?? metadata.name ?? "Anonymous")
                     .font(OlasDesign.Typography.bodyMedium)
                     .foregroundStyle(OlasDesign.Colors.text)
                 
-                Text("@\(profile.name ?? String(pubkey.prefix(8)))")
+                Text("@\(metadata.name ?? String(pubkey.prefix(8)))")
                     .font(OlasDesign.Typography.caption)
                     .foregroundStyle(OlasDesign.Colors.textSecondary)
             }
@@ -340,18 +343,18 @@ struct NutZapView: View {
     }
     
     private func loadUserProfile(pubkey: String) async {
-        guard let ndk = nostrManager.ndk,
-              let profileManager = ndk.profileManager else { return }
+        guard nostrManager.isInitialized,
+              let profileManager = nostrManager.ndk.profileManager else { return }
         
-        var foundProfile: NDKUserProfile?
-        for await profile in await profileManager.observe(for: pubkey, maxAge: 3600) {
-            foundProfile = profile
+        var foundMetadata: NDKUserMetadata?
+        for await metadata in await profileManager.subscribe(for: pubkey, maxAge: 3600) {
+            foundMetadata = metadata
             break // Just get the first one
         }
         
-        if let profile = foundProfile {
+        if let metadata = foundMetadata {
             await MainActor.run {
-                self.selectedUser = profile
+                self.selectedUser = metadata
                 self.selectedUserPubkey = pubkey
             }
         }
@@ -400,20 +403,20 @@ struct NutZapView: View {
         }
         
         // Find a recent event from the user to zap
-        guard let ndk = nostrManager.ndk else { return }
+        guard nostrManager.isInitialized else { return }
+        let ndk = nostrManager.ndk
             
-            let filter = NDKFilter(
-                authors: [pubkey],
-                kinds: [EventKind.textNote],
-                limit: 1
-            )
-            
-            // Use observe to get an event
-            let dataSource = ndk.observe(
-                filter: filter,
-                maxAge: 0,
-                cachePolicy: .cacheOnly
-            )
+        let filter = NDKFilter(
+            authors: [pubkey],
+            kinds: [EventKind.textNote]
+        )
+        
+        // Use observe to get an event
+        let dataSource = ndk.subscribe(
+            filter: filter,
+            maxAge: 0,
+            cachePolicy: .cacheOnly
+        )
             
             var foundEvent: NDKEvent?
             for await event in dataSource.events {
@@ -423,17 +426,25 @@ struct NutZapView: View {
             
         if let event = foundEvent {
             do {
-                // Get accepted mints (using default mints for now)
-                let mintURLs = await walletManager.getActiveMintURLs()
+                guard let wallet = nostrManager.cashuWallet else {
+                    throw WalletError.noActiveWallet
+                }
+                
+                // Get accepted mints
+                let mintURLs = await wallet.mints.getMintURLs()
                 let acceptedMints = mintURLs.compactMap { URL(string: $0) }
                 
-                // Send nutzap to the event's author
-                try await walletManager.sendNutzap(
-                    to: event.pubkey,
-                    amount: selectedAmount,
-                    comment: comment.isEmpty ? nil : comment,
-                    acceptedMints: acceptedMints
+                // Create nutzap request
+                let request = NutzapPaymentRequest(
+                    amountSats: selectedAmount,
+                    recipientPubkey: event.pubkey,
+                    recipientP2PK: "", // Empty P2PK for now, will be set by wallet
+                    acceptedMints: acceptedMints,
+                    comment: comment.isEmpty ? nil : comment
                 )
+                
+                // Send nutzap
+                _ = try await wallet.pay(request)
                 
                 await MainActor.run {
                     showSuccess = true

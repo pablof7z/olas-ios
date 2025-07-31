@@ -493,7 +493,7 @@ struct KeyGenerationView: View {
     private func completeOnboarding() {
         Task {
             do {
-                _ = try await nostrManager.createNewAccount(
+                _ = try await nostrManager.olasCreateNewAccount(
                     displayName: "Olas User",
                     about: "Visual storyteller on Nostr 📸"
                 )
@@ -617,7 +617,7 @@ struct SecurityEducationView: View {
     private func completeOnboarding() {
         Task {
             do {
-                _ = try await nostrManager.createNewAccount(
+                _ = try await nostrManager.olasCreateNewAccount(
                     displayName: "Olas User",
                     about: "Visual storyteller on Nostr 📸"
                 )

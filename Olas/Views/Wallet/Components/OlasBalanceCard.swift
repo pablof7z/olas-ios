@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct OlasBalanceCard: View {
-    @ObservedObject var walletManager: OlasWalletManager
+    @Environment(NostrManager.self) private var nostrManager
     @State private var isExpanded = false
     @State private var pulseAnimation = false
     @State private var balanceAnimation = false
@@ -212,8 +212,23 @@ struct OlasBalanceCard: View {
         }
         .task {
             // Load wallet data
-            currentBalance = await walletManager.currentBalance
-            mintBalances = await walletManager.getAllMintBalances()
+            guard let wallet = nostrManager.cashuWallet else {
+                currentBalance = 0
+                mintBalances = [:]
+                return
+            }
+            
+            currentBalance = (try? await wallet.getBalance()) ?? 0
+            
+            let mintURLs = await wallet.mints.getMintURLs()
+            var balances: [String: Int64] = [:]
+            for mintString in mintURLs {
+                if let mintURL = URL(string: mintString) {
+                    let balance = await wallet.getBalance(mint: mintURL)
+                    balances[mintString] = balance
+                }
+            }
+            mintBalances = balances
         }
     }
     

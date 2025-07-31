@@ -10,7 +10,6 @@
 		01C1277A4958204E2214C93F /* WalletComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0D414502891E1EC2CE6E922 /* WalletComponents.swift */; };
 		06AC116E460E4F31DD3BBD57 /* ExploreGridItem.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE5D2F12FC56EE978555C47B /* ExploreGridItem.swift */; };
 		0905711379449AC46A4273AC /* NutZapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 287257D32F572630FCA42034 /* NutZapView.swift */; };
-		0B2306D1588353B28A44655F /* BlossomServerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DF6B5D6DAD2165D2F3B150C /* BlossomServerManager.swift */; };
 		0E232AE7924923B09E2FC403 /* QRScannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADCEFDDDBDFB19EBBEEB77C /* QRScannerView.swift */; };
 		0F5CE064001E306B1B790C55 /* CreateAccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 705A87128F6D1AEBA79A339E /* CreateAccountView.swift */; };
 		180647DC6D1F69704EA8A6C9 /* RelayManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A38516C3E4BB7DAAF6E8E239 /* RelayManagementView.swift */; };
@@ -35,7 +34,6 @@
 		52C8A3E24BA0F5D7F9884660 /* OlasCaptionComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F05007F8118B0E79C2A3ADB /* OlasCaptionComposer.swift */; };
 		5A2FB10AD16E8B4B095AE7B3 /* OlasMultiImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14D8D07AC09D2E5371438874 /* OlasMultiImageView.swift */; };
 		5B90C5011540A059E7F03BEB /* OlasEnhancedBalanceCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 49939215429C72DDA42C69FD /* OlasEnhancedBalanceCard.swift */; };
-		6389B6CBBE144EEF27F8BAA5 /* OlasAvatar.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE9B0B9BAB8AD75A199772FF /* OlasAvatar.swift */; };
 		68C989A95B9A5996E6EC9E0A /* SendView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92D8B8EBAAF6B0054A91BADA /* SendView.swift */; };
 		774FD4738B5F1EAAC3603CF0 /* ProfileView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9AC67F043144FFC6CBB7302 /* ProfileView.swift */; };
 		79213F75D245172935B59B1B /* MintManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F055984A54417D09BE8C6CD /* MintManagementView.swift */; };
@@ -45,7 +43,6 @@
 		83A8C8A32335B49BC0B753DC /* AddMintView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E35B4E3669C4951F0F18C7 /* AddMintView.swift */; };
 		8F40443D2C8F504CC37FDC27 /* ZapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 354D62DFA4445337C08BF974 /* ZapView.swift */; };
 		9006EABF7102F9B0E1075540 /* StoriesManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94D85DB518FBEFCAC7500056 /* StoriesManager.swift */; };
-		94538F4CB2769C17DC35092E /* ImetaUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4AABC79BC6DFBC543250469D /* ImetaUtils.swift */; };
 		A136013AB9390198484B893D /* CreatePostView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1204549B5A0A2545A6BE397 /* CreatePostView.swift */; };
 		A5FB76D9192AA9F499E1AF21 /* ModernStatCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD16CB15C45D9DAE6E3DE7CF /* ModernStatCard.swift */; };
 		A7CD9D3C96A0FBC6F166F06D /* AnalyticsDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E0CFA31A35D3FB79EBD014A /* AnalyticsDashboardView.swift */; };
@@ -59,6 +56,7 @@
 		C512EF61FCCE3F0FCB0C6C3B /* NostrManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = D8185DC6DFE110FCB91699D4 /* NostrManager.swift */; };
 		C73CCED2E1070B7C29DFBE6F /* WalletUIHelpers.swift in Sources */ = {isa = PBXBuildFile; fileRef = 851122CBDCB02605E4D5F097 /* WalletUIHelpers.swift */; };
 		D109CAAD7B0CB24AA2BEA4CF /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEBCFD4730EA570CF77AC6AE /* ContentView.swift */; };
+		D8C12C65428B56B549E5BD88 /* NDKSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = 09618427A2C6A577A513A11C /* NDKSwiftUI */; };
 		D902ABD89CEEC5ECC73FA005 /* ThemeSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29C39E91C10971E68365A9BB /* ThemeSettingsView.swift */; };
 		E25C3417C2CC8E4EF8B1DB64 /* AdvancedCameraView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14DCF312490C47B3A62C0A77 /* AdvancedCameraView.swift */; };
 		E41B33117D720DF62A208927 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29C0295E5754245F8E85B8F0 /* MainTabView.swift */; };
@@ -69,19 +67,19 @@
 		EDD04226FB268D4CA368D040 /* OlasUtilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B230A536A508E6F2711DA52 /* OlasUtilities.swift */; };
 		EE409790717079A449B3CDC6 /* OlasStoriesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43D4832876CE9DFB908A4B89 /* OlasStoriesView.swift */; };
 		F2E1196AD75ABF08BD62EAAE /* OlasBalanceCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDD6264F0208655CB610E045 /* OlasBalanceCard.swift */; };
+		F44C2D496841686C4DA01A5B /* AccountDrawerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B81360539E2AA136D3FE24B0 /* AccountDrawerView.swift */; };
 		F56A43E6A9EF0E351584759F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C568672BABA5A65535DBAA1F /* Assets.xcassets */; };
 		F628A659FC569615500777C0 /* BlurhashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2889EBFAC7191DB90EF5A718 /* BlurhashView.swift */; };
 		F949382BAFCE1327F2782ED3 /* AuthenticationView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D7EDC8314A9A5A7B85A20EC /* AuthenticationView.swift */; };
 		F96646DDAEF5560130E65C0D /* WalletView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA76818313AF29C142656C94 /* WalletView.swift */; };
-		FBCE5F4649AA36855003BF51 /* OlasRichText.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD6C17EF35CA0BA6764177D5 /* OlasRichText.swift */; };
 		FE73F3A115D7AE36B2065165 /* DesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 612AB9C195293120935CEAAE /* DesignSystem.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		068A9E499CCDD35FF9C66745 /* WalletManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletManager.swift; sourceTree = "<group>"; };
 		0A286AD4220C7848F6E96670 /* OlasApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OlasApp.swift; sourceTree = "<group>"; };
-		0DF6B5D6DAD2165D2F3B150C /* BlossomServerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlossomServerManager.swift; sourceTree = "<group>"; };
 		0F05007F8118B0E79C2A3ADB /* OlasCaptionComposer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OlasCaptionComposer.swift; sourceTree = "<group>"; };
+		1006330845B578B0E1BA44AF /* NDKSwift */ = {isa = PBXFileReference; lastKnownFileType = folder; name = NDKSwift; path = ../NDKSwift; sourceTree = SOURCE_ROOT; };
 		14D8D07AC09D2E5371438874 /* OlasMultiImageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OlasMultiImageView.swift; sourceTree = "<group>"; };
 		14DCF312490C47B3A62C0A77 /* AdvancedCameraView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedCameraView.swift; sourceTree = "<group>"; };
 		287257D32F572630FCA42034 /* NutZapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NutZapView.swift; sourceTree = "<group>"; };
@@ -94,7 +92,6 @@
 		43D4832876CE9DFB908A4B89 /* OlasStoriesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OlasStoriesView.swift; sourceTree = "<group>"; };
 		49939215429C72DDA42C69FD /* OlasEnhancedBalanceCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OlasEnhancedBalanceCard.swift; sourceTree = "<group>"; };
 		4A9926280304B7F0FE1C5562 /* GlassmorphicComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassmorphicComponents.swift; sourceTree = "<group>"; };
-		4AABC79BC6DFBC543250469D /* ImetaUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImetaUtils.swift; sourceTree = "<group>"; };
 		4B673BF49DAC65DDF01AE3DE /* ReplyView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyView.swift; sourceTree = "<group>"; };
 		4BB292BF2B88F7420CEA02E0 /* StoriesContainerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoriesContainerView.swift; sourceTree = "<group>"; };
 		4EF431B820BD21FA77DA3788 /* CategoryPill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryPill.swift; sourceTree = "<group>"; };
@@ -126,9 +123,9 @@
 		A71169960D37CBCEE47EAA21 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		AA76818313AF29C142656C94 /* WalletView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletView.swift; sourceTree = "<group>"; };
 		AD16CB15C45D9DAE6E3DE7CF /* ModernStatCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModernStatCard.swift; sourceTree = "<group>"; };
-		AD6C17EF35CA0BA6764177D5 /* OlasRichText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OlasRichText.swift; sourceTree = "<group>"; };
 		AE5D2F12FC56EE978555C47B /* ExploreGridItem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExploreGridItem.swift; sourceTree = "<group>"; };
 		B2CACDD908BC9D11BF314BE1 /* Color+Extensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Color+Extensions.swift"; sourceTree = "<group>"; };
+		B81360539E2AA136D3FE24B0 /* AccountDrawerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountDrawerView.swift; sourceTree = "<group>"; };
 		BB0753CE6950CB82115B0371 /* OlasImageEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OlasImageEditor.swift; sourceTree = "<group>"; };
 		C060397AFF9AE231D0F4C5D1 /* OlasWalletView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OlasWalletView.swift; sourceTree = "<group>"; };
 		C30D4C6D7E0FBCFA086E1A14 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
@@ -140,7 +137,6 @@
 		D7FEE893C1986FEF0987BFAC /* OlasCameraView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OlasCameraView.swift; sourceTree = "<group>"; };
 		D8185DC6DFE110FCB91699D4 /* NostrManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NostrManager.swift; sourceTree = "<group>"; };
 		D9AC67F043144FFC6CBB7302 /* ProfileView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileView.swift; sourceTree = "<group>"; };
-		DE9B0B9BAB8AD75A199772FF /* OlasAvatar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OlasAvatar.swift; sourceTree = "<group>"; };
 		EDD6264F0208655CB610E045 /* OlasBalanceCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OlasBalanceCard.swift; sourceTree = "<group>"; };
 		F0D414502891E1EC2CE6E922 /* WalletComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletComponents.swift; sourceTree = "<group>"; };
 		F1204549B5A0A2545A6BE397 /* CreatePostView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreatePostView.swift; sourceTree = "<group>"; };
@@ -155,6 +151,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				E64AFCC01633D0F2BE3CCA80 /* NDKSwift in Frameworks */,
+				D8C12C65428B56B549E5BD88 /* NDKSwiftUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -207,6 +204,7 @@
 			isa = PBXGroup;
 			children = (
 				8EF384136D14289E9B42B384 /* Olas */,
+				B58D784B1ABA32F8865CB4E2 /* Packages */,
 				CFE7D3B330FDFD275FB9F30E /* Products */,
 			);
 			sourceTree = "<group>";
@@ -299,15 +297,21 @@
 		AC776A9DD7F4D72B0183BCE2 /* Models */ = {
 			isa = PBXGroup;
 			children = (
-				0DF6B5D6DAD2165D2F3B150C /* BlossomServerManager.swift */,
 				B2CACDD908BC9D11BF314BE1 /* Color+Extensions.swift */,
 				612AB9C195293120935CEAAE /* DesignSystem.swift */,
-				4AABC79BC6DFBC543250469D /* ImetaUtils.swift */,
 				D8185DC6DFE110FCB91699D4 /* NostrManager.swift */,
 				94D85DB518FBEFCAC7500056 /* StoriesManager.swift */,
 				068A9E499CCDD35FF9C66745 /* WalletManager.swift */,
 			);
 			path = Models;
+			sourceTree = "<group>";
+		};
+		B58D784B1ABA32F8865CB4E2 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				1006330845B578B0E1BA44AF /* NDKSwift */,
+			);
+			name = Packages;
 			sourceTree = "<group>";
 		};
 		BED0E79EE4B7F2D7B531A935 /* Stories */ = {
@@ -324,15 +328,14 @@
 		C11C1420A07269F24B4D3411 /* Components */ = {
 			isa = PBXGroup;
 			children = (
+				B81360539E2AA136D3FE24B0 /* AccountDrawerView.swift */,
 				14DCF312490C47B3A62C0A77 /* AdvancedCameraView.swift */,
 				64A22C0E8157BAB1D6F87DC0 /* HeartAnimation.swift */,
-				DE9B0B9BAB8AD75A199772FF /* OlasAvatar.swift */,
 				74FC226D4CCA6A20D5CD00E9 /* OlasButton.swift */,
 				D7FEE893C1986FEF0987BFAC /* OlasCameraView.swift */,
 				0F05007F8118B0E79C2A3ADB /* OlasCaptionComposer.swift */,
 				BB0753CE6950CB82115B0371 /* OlasImageEditor.swift */,
 				14D8D07AC09D2E5371438874 /* OlasMultiImageView.swift */,
-				AD6C17EF35CA0BA6764177D5 /* OlasRichText.swift */,
 				4B673BF49DAC65DDF01AE3DE /* ReplyView.swift */,
 				354D62DFA4445337C08BF974 /* ZapView.swift */,
 			);
@@ -398,6 +401,7 @@
 			name = Olas;
 			packageProductDependencies = (
 				8AA960B808EB700D62AED64F /* NDKSwift */,
+				09618427A2C6A577A513A11C /* NDKSwiftUI */,
 			);
 			productName = Olas;
 			productReference = A0687A67FF77241C3031DC9D /* Olas.app */;
@@ -429,7 +433,7 @@
 			mainGroup = 5B246F9744CFEEE1AB08646C;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				FCD1349DB1700EBAEA69E1EB /* XCRemoteSwiftPackageReference "NDKSwift" */,
+				5ECB92F0A553EB3D4B51B9C6 /* XCLocalSwiftPackageReference "../NDKSwift" */,
 			);
 			preferredProjectObjectVersion = 54;
 			projectDirPath = "";
@@ -457,13 +461,13 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				F44C2D496841686C4DA01A5B /* AccountDrawerView.swift in Sources */,
 				40F6D573CBAEC07884013088 /* AccountSettingsView.swift in Sources */,
 				83A8C8A32335B49BC0B753DC /* AddMintView.swift in Sources */,
 				E25C3417C2CC8E4EF8B1DB64 /* AdvancedCameraView.swift in Sources */,
 				A7CD9D3C96A0FBC6F166F06D /* AnalyticsDashboardView.swift in Sources */,
 				B8BC21E8CCEA9D3D36982769 /* AppState.swift in Sources */,
 				F949382BAFCE1327F2782ED3 /* AuthenticationView.swift in Sources */,
-				0B2306D1588353B28A44655F /* BlossomServerManager.swift in Sources */,
 				F628A659FC569615500777C0 /* BlurhashView.swift in Sources */,
 				360DE0B38471B7920BC2063B /* CategoryPill.swift in Sources */,
 				E9B5E3D9D503DFBDC206DF2F /* Color+Extensions.swift in Sources */,
@@ -479,7 +483,6 @@
 				E63F58493A6E4DE0C546D1F0 /* GlassmorphicComponents.swift in Sources */,
 				C2A3272349AA15DF12B1DFFC /* HashtagView.swift in Sources */,
 				4F7AB496D2EACFCF9588CE81 /* HeartAnimation.swift in Sources */,
-				94538F4CB2769C17DC35092E /* ImetaUtils.swift in Sources */,
 				E41B33117D720DF62A208927 /* MainTabView.swift in Sources */,
 				79213F75D245172935B59B1B /* MintManagementView.swift in Sources */,
 				A5FB76D9192AA9F499E1AF21 /* ModernStatCard.swift in Sources */,
@@ -488,7 +491,6 @@
 				30900EADB1C47C320161DE31 /* NotificationSettingsView.swift in Sources */,
 				0905711379449AC46A4273AC /* NutZapView.swift in Sources */,
 				2A29D6554673DAA6F190F3DE /* OlasApp.swift in Sources */,
-				6389B6CBBE144EEF27F8BAA5 /* OlasAvatar.swift in Sources */,
 				F2E1196AD75ABF08BD62EAAE /* OlasBalanceCard.swift in Sources */,
 				39402DE58E8562B4B5607BAE /* OlasButton.swift in Sources */,
 				E719C86C48E19C300B0DC21D /* OlasCameraView.swift in Sources */,
@@ -496,7 +498,6 @@
 				5B90C5011540A059E7F03BEB /* OlasEnhancedBalanceCard.swift in Sources */,
 				486054C690B69D02E841B06E /* OlasImageEditor.swift in Sources */,
 				5A2FB10AD16E8B4B095AE7B3 /* OlasMultiImageView.swift in Sources */,
-				FBCE5F4649AA36855003BF51 /* OlasRichText.swift in Sources */,
 				EE409790717079A449B3CDC6 /* OlasStoriesView.swift in Sources */,
 				EDD04226FB268D4CA368D040 /* OlasUtilities.swift in Sources */,
 				BA0CEE84B3430BCF351594D8 /* OlasWalletView.swift in Sources */,
@@ -722,21 +723,20 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCRemoteSwiftPackageReference section */
-		FCD1349DB1700EBAEA69E1EB /* XCRemoteSwiftPackageReference "NDKSwift" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/pablof7z/NDKSwift";
-			requirement = {
-				kind = revision;
-				revision = dba57b0108cde09d918f5699e94c09f80e82bb98;
-			};
+/* Begin XCLocalSwiftPackageReference section */
+		5ECB92F0A553EB3D4B51B9C6 /* XCLocalSwiftPackageReference "../NDKSwift" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../NDKSwift;
 		};
-/* End XCRemoteSwiftPackageReference section */
+/* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		09618427A2C6A577A513A11C /* NDKSwiftUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NDKSwiftUI;
+		};
 		8AA960B808EB700D62AED64F /* NDKSwift */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = FCD1349DB1700EBAEA69E1EB /* XCRemoteSwiftPackageReference "NDKSwift" */;
 			productName = NDKSwift;
 		};
 /* End XCSwiftPackageProductDependency section */

@@ -1,5 +1,6 @@
 import SwiftUI
 import NDKSwift
+import NDKSwiftUI
 
 // MARK: - Particle System
 
@@ -145,7 +146,7 @@ struct RippleButton: View {
 
 struct TransactionDetailView: View {
     let transaction: WalletTransaction
-    @ObservedObject var walletManager: OlasWalletManager
+    let nostrManager: NostrManager
     @Environment(\.dismiss) private var dismiss
     @State private var showingShareSheet = false
     @State private var copiedToClipboard = false
@@ -738,11 +739,6 @@ struct DetailRow: View {
 struct TransactionQRCodeView: View {
     let content: String
     @Environment(\.dismiss) private var dismiss
-    #if os(iOS)
-    @State private var qrImage: UIImage?
-    #else
-    @State private var qrImage: NSImage?
-    #endif
     @State private var showCopied = false
     
     var body: some View {
@@ -752,35 +748,13 @@ struct TransactionQRCodeView: View {
                     .ignoresSafeArea()
                 
                 VStack(spacing: OlasDesign.Spacing.xl) {
-                    if let qrImage = qrImage {
-                        #if os(iOS)
-                        Image(uiImage: qrImage)
-                            .interpolation(.none)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 280, height: 280)
-                            .padding(OlasDesign.Spacing.lg)
-                            .background(Color.white)
-                            .cornerRadius(OlasDesign.CornerRadius.lg)
-                            .shadow(color: Color.black.opacity(0.1), radius: 20, x: 0, y: 10)
-                            .scaleEffect(showCopied ? 0.95 : 1)
-                            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showCopied)
-                        #else
-                        Image(nsImage: qrImage)
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 280, height: 280)
-                            .padding(OlasDesign.Spacing.lg)
-                            .background(Color.white)
-                            .cornerRadius(OlasDesign.CornerRadius.lg)
-                            .shadow(color: Color.black.opacity(0.1), radius: 20, x: 0, y: 10)
-                            .scaleEffect(showCopied ? 0.95 : 1)
-                            .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showCopied)
-                        #endif
-                    } else {
-                        ProgressView()
-                            .frame(width: 280, height: 280)
-                    }
+                    NDKUIQRCodeView(content: content, size: 280)
+                        .padding(OlasDesign.Spacing.lg)
+                        .background(Color.white)
+                        .cornerRadius(OlasDesign.CornerRadius.lg)
+                        .shadow(color: Color.black.opacity(0.1), radius: 20, x: 0, y: 10)
+                        .scaleEffect(showCopied ? 0.95 : 1)
+                        .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showCopied)
                     
                     Text("Scan to view details")
                         .font(OlasDesign.Typography.body)
@@ -818,30 +792,9 @@ struct TransactionQRCodeView: View {
                     }
                 }
             }
-            .onAppear {
-                generateQRCode()
-            }
         }
     }
     
-    private func generateQRCode() {
-        let context = CIContext()
-        let filter = CIFilter.qrCodeGenerator()
-        filter.message = Data(content.utf8)
-        
-        if let outputImage = filter.outputImage {
-            let transform = CGAffineTransform(scaleX: 10, y: 10)
-            let scaledImage = outputImage.transformed(by: transform)
-            
-            if let cgImage = context.createCGImage(scaledImage, from: scaledImage.extent) {
-                #if os(iOS)
-                qrImage = UIImage(cgImage: cgImage)
-                #else
-                qrImage = NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
-                #endif
-            }
-        }
-    }
     
     private func copyContent() {
         #if os(iOS)

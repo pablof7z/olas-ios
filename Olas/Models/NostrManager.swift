@@ -5,420 +5,326 @@ import Observation
 
 @MainActor
 @Observable
-class NostrManager {
-    var ndk: NDK?
-    var isConnected = false
-    var relayStatus: [String: Bool] = [:]
+class NostrManager: ObservableObject {
+    // MARK: - Core Properties
     
-    private var ndkAuthManager: NDKAuthManager
+    private(set) var isConnected = false
+    private(set) var isInitialized = false
+    private var _ndk: NDK?
+    
+    var ndk: NDK {
+        guard let ndk = _ndk else {
+            fatalError("NDK accessed before initialization. Check isInitialized before accessing ndk.")
+        }
+        return ndk
+    }
+    
     var cache: NDKSQLiteCache?
-    
-    
-    // Current user's profile
-    private(set) var currentUserProfile: NDKUserProfile?
-    private var profileObservationTask: Task<Void, Never>?
-    
-    // Wallet manager
-    private(set) var walletManager: OlasWalletManager?
     var zapManager: NDKZapManager?
     
-    // Default relays for Olas (visual content focused)
-    let defaultRelays = [
-        RelayConstants.primal,
-        RelayConstants.damus,
-        RelayConstants.nosLol,
-        RelayConstants.nostrWine,
-        "wss://relay.nostr.band"
-    ]
+    // Auth manager
+    private(set) var authManager: NDKAuthManager?
     
-    // Key for storing user-added relays
-    private static let userRelaysKey = "OlasUserAddedRelays"
+    // Authentication status
+    var isAuthenticated: Bool {
+        authManager?.isAuthenticated ?? false
+    }
+    
+    // Current user
+    var currentUser: NDKUser? {
+        guard let pubkey = authManager?.activeSession?.pubkey else { return nil }
+        let user = NDKUser(pubkey: pubkey)
+        user.ndk = self.ndk
+        return user
+    }
+    
+    // MARK: - Olas-specific Properties
+    
+    // Wallet integration (direct NIP60Wallet access)
+    private(set) var cashuWallet: NIP60Wallet?
+    private(set) var isLoadingWallet = false
+    private(set) var walletError: Error?
+    
+    // Blossom integration
+    private(set) var blossomManager: NDKBlossomServerManager?
+    
+    // MARK: - Configuration Overrides
+    
+    var defaultRelays: [String] {
+        [
+            RelayConstants.primal,
+            RelayConstants.damus,
+            RelayConstants.nosLol,
+            RelayConstants.nostrBand,
+            "wss://relay.nostr.wine"
+        ]
+    }
+    
+    var appRelaysKey: String {
+        "OlasAppAddedRelays"
+    }
+    
+    var clientTagConfig: NDKClientTagConfig? {
+        NDKClientTagConfig(
+            name: "Olas",
+            relay: RelayConstants.primal,
+            autoTag: true,
+            excludedKinds: [
+                EventKind.encryptedDirectMessage
+            ]
+        )
+    }
+    
+    var sessionConfiguration: NDKSessionConfiguration {
+        NDKSessionConfiguration(
+            dataRequirements: [.followList, .muteList],
+            preloadStrategy: .progressive
+        )
+    }
+    
+    // MARK: - Initialization
     
     init() {
         print("🎨 [OlasManager] Initializing...")
-        self.ndkAuthManager = NDKAuthManager.shared
+        
+        // Configure NDK logging to show subscription details
+        NDKLogger.configure(
+            logLevel: .info,
+            enabledCategories: [.subscription, .network, .relay, .general],
+            logNetworkTraffic: false
+        )
+        print("🎨 [OlasManager] Configured NDK logging for subscription visibility")
+        
         Task {
             await setupNDK()
         }
     }
     
-    private func setupNDK() async {
+    // MARK: - Setup
+    
+    func setupNDK() async {
         print("🎨 [OlasManager] Setting up NDK...")
+        
         // Initialize SQLite cache for better performance and offline access
         do {
             cache = try await NDKSQLiteCache()
             let allRelays = getAllRelays()
-            ndk = NDK(relayUrls: allRelays, cache: cache)
-            print("NDK initialized with SQLite cache and \(allRelays.count) relays")
+            _ndk = NDK(relayUrls: allRelays, cache: cache)
+            print("🎨 [OlasManager] NDK initialized with SQLite cache and \(allRelays.count) relays: \(allRelays)")
         } catch {
-            print("Failed to initialize SQLite cache: \(error). Continuing without cache.")
+            print("🎨 [OlasManager] Failed to initialize SQLite cache: \(error). Continuing without cache.")
             let allRelays = getAllRelays()
-            ndk = NDK(relayUrls: allRelays)
+            _ndk = NDK(relayUrls: allRelays)
+            print("🎨 [OlasManager] NDK initialized without cache and \(allRelays.count) relays: \(allRelays)")
         }
         
-        // Set NDK on auth manager
-        if let ndk = ndk {
-            print("🎨 [OlasManager] Setting NDK on auth manager")
-            ndkAuthManager.setNDK(ndk)
-            
-            // Auth manager automatically restores sessions when NDK is set
-            
-            // Configure NIP-89 client tags for Olas
-            ndk.clientTagConfig = NDKClientTagConfig(
-                name: "Olas",
-                relay: RelayConstants.primal,
-                autoTag: true,
-                excludedKinds: [
-                    EventKind.encryptedDirectMessage
-                ]
-            )
+        // Configure client tags if provided
+        if let config = clientTagConfig {
+            ndk.clientTagConfig = config
             print("🎨 [OlasManager] Configured NIP-89 client tags")
-            
-            // If authenticated after restore, initialize data sources
-            if ndkAuthManager.isAuthenticated {
-                if let signer = ndkAuthManager.activeSigner {
-                    Task {
-                        let pubkey = try await signer.pubkey
-                        await initializeDataSources(for: pubkey)
-                    }
-                }
-            }
         }
+        
+        // Initialize zap manager
+        zapManager = NDKZapManager(ndk: ndk)
+        print("🎨 [OlasManager] Zap manager initialized")
+        
+        // Initialize auth manager
+        authManager = NDKAuthManager(ndk: ndk)
+        await authManager?.initialize()
+        print("🎨 [OlasManager] Auth manager initialized")
+        
+        // Initialize Blossom manager
+        blossomManager = NDKBlossomServerManager(ndk: ndk)
+        print("🎨 [OlasManager] Initialized Blossom manager")
         
         Task {
             await connectToRelays()
         }
+        
+        // Mark as initialized
+        isInitialized = true
+        print("🎨 [OlasManager] Initialization complete")
     }
     
     func connectToRelays() async {
-        guard let ndk = ndk else { return }
-        
-        print("OlasManager - Connecting to relays")
+        print("🎨 [OlasManager] Connecting to relays...")
         await ndk.connect()
         isConnected = true
-        print("OlasManager - Connected to relays")
-        
-        // Monitor relay status
-        await monitorRelayStatus()
+        print("🎨 [OlasManager] Connected to relays")
     }
     
-    private func monitorRelayStatus() async {
-        guard let ndk = ndk else { return }
-        
-        // Monitor relay changes
-        let relayChanges = await ndk.relayChanges
-        for await change in relayChanges {
-            switch change {
-            case .relayConnected(let relay):
-                relayStatus[relay.url] = true
-            case .relayDisconnected(let relay):
-                relayStatus[relay.url] = false
-            case .relayAdded(let relay):
-                relayStatus[relay.url] = false
-            case .relayRemoved(let relay):
-                relayStatus.removeValue(forKey: relay)
-            }
-        }
+    func getAllRelays() -> [String] {
+        let appRelays = UserDefaults.standard.stringArray(forKey: appRelaysKey) ?? []
+        return Array(Set(defaultRelays + appRelays))
     }
     
-    func login(with privateKey: String) async throws {
-        guard let ndk = ndk else { throw OlasError.ndkNotInitialized }
-        
-        // Create signer - NDKPrivateKeySigner handles both nsec and hex formats
-        let signer: NDKPrivateKeySigner
-        if privateKey.hasPrefix("nsec1") {
-            signer = try NDKPrivateKeySigner(nsec: privateKey)
-        } else {
-            signer = try NDKPrivateKeySigner(privateKey: privateKey)
-        }
-        
-        // Start session with follow list and mute list support
-        try await ndk.startSession(
-            signer: signer,
-            config: NDKSessionConfiguration(
-                dataRequirements: [.followList, .muteList],
-                preloadStrategy: .progressive
-            )
-        )
-        
-        // Create auth session for persistence
-        let session = try await ndkAuthManager.createSession(
-            with: signer,
-            requiresBiometric: false,
-            isHardwareBacked: false
-        )
-        
-        // Switch to the new session
-        try await ndkAuthManager.switchToSession(session)
-        
-        let publicKey = try await signer.pubkey
-        print("Logged in with public key: \(publicKey)")
-        
-        // Initialize declarative data sources
-        await initializeDataSources(for: publicKey)
+    var appAddedRelays: [String] {
+        UserDefaults.standard.stringArray(forKey: appRelaysKey) ?? []
     }
     
-    func createNewAccount(displayName: String, about: String? = nil, picture: String? = nil) async throws -> NDKSession {
-        print("🎨 [OlasManager] createNewAccount() called with displayName: \(displayName)")
+    // MARK: - Authentication Wrapper Methods
+    
+    /// Login with private key and initialize Olas-specific features
+    func olasLogin(with privateKey: String) async throws {
+        print("🎨 [OlasManager] olasLogin() called")
         
-        guard let ndk = ndk else { 
-            print("🎨 [OlasManager] ERROR: NDK is not initialized!")
-            throw OlasError.ndkNotInitialized 
+        // Create signer and add session
+        let signer = try NDKPrivateKeySigner(nsec: privateKey)
+        guard let authManager = authManager else {
+            throw NDKError.notConfigured("Auth manager not initialized")
+        }
+        _ = try await authManager.addSession(signer, requiresBiometric: true)
+        
+        // Start NDK session
+        if authManager.isAuthenticated, let activeSigner = authManager.activeSigner {
+            try await ndk.startSession(signer: activeSigner, config: sessionConfiguration)
         }
         
-        // Generate new private key
+        // Initialize app-specific features
+        await initializeAppFeatures()
+    }
+    
+    /// Create new account and initialize Olas-specific features
+    func olasCreateNewAccount(displayName: String, about: String? = nil, picture: String? = nil) async throws {
+        print("🎨 [OlasManager] olasCreateNewAccount() called with displayName: \(displayName)")
+        
+        // Generate new key
         let signer = try NDKPrivateKeySigner.generate()
         
-        // Start session
-        print("🎨 [OlasManager] Starting session...")
-        try await ndk.startSession(
-            signer: signer,
-            config: NDKSessionConfiguration(
-                dataRequirements: [.followList, .muteList],
-                preloadStrategy: .progressive
-            )
-        )
+        // Add session
+        guard let authManager = authManager else {
+            throw NDKError.notConfigured("Auth manager not initialized")
+        }
+        _ = try await authManager.addSession(signer, requiresBiometric: true)
         
-        // Create auth session for persistence
-        let session = try await ndkAuthManager.createSession(
-            with: signer,
-            requiresBiometric: false,
-            isHardwareBacked: false
-        )
-        
-        // Create and publish profile
-        let metadata = NDKUserProfile(
-            name: displayName.lowercased().replacingOccurrences(of: " ", with: "_"),
-            displayName: displayName,
-            about: about ?? "Visual storyteller on Nostr 📸",
-            picture: picture
-        )
-        
-        if ndkAuthManager.isAuthenticated {
-            print("🎨 [OlasManager] User is authenticated, publishing metadata...")
-            // Create metadata event
-            let metadataContent = try JSONCoding.encodeToString(metadata)
-            let metadataEvent = try await NDKEventBuilder(ndk: ndk)
-                .content(metadataContent)
-                .kind(EventKind.metadata)
-                .build(signer: signer)
-            
-            _ = try await ndk.publish(metadataEvent)
-            
-            // Update session with profile
-            try await ndkAuthManager.updateActiveSessionProfile(metadata)
+        // Start NDK session
+        if authManager.isAuthenticated, let activeSigner = authManager.activeSigner {
+            try await ndk.startSession(signer: activeSigner, config: sessionConfiguration)
         }
         
-        // Initialize declarative data sources
-        await initializeDataSources(for: session.pubkey)
+        // Create profile metadata dictionary
+        var metadataDict: [String: String] = [:]
+        metadataDict["name"] = displayName
+        metadataDict["about"] = about ?? "Visual storyteller on Nostr 📸"
+        if let picture = picture {
+            metadataDict["picture"] = picture
+        }
         
-        print("🎨 [OlasManager] createNewAccount() completed successfully")
-        return session
+        // Convert to JSON string
+        let metadataData = try JSONSerialization.data(withJSONObject: metadataDict, options: [])
+        let metadataJSON = String(data: metadataData, encoding: .utf8) ?? "{}"
+        
+        // Create a profile event and publish it
+        let profileEvent = try await NDKEventBuilder(ndk: ndk)
+            .kind(0)
+            .content(metadataJSON)
+            .build(signer: signer)
+        _ = try await ndk.publish(profileEvent)
+        
+        // Initialize app-specific features
+        await initializeAppFeatures()
+        
+        print("🎨 [OlasManager] olasCreateNewAccount() completed successfully")
     }
     
-    func createAccountFromNsec(_ nsec: String, displayName: String) async throws -> NDKSession {
-        print("🎨 [OlasManager] createAccountFromNsec() called")
-        guard let ndk = ndk else { throw OlasError.ndkNotInitialized }
-        
-        let signer = try NDKPrivateKeySigner(nsec: nsec)
-        
-        // Start session
-        try await ndk.startSession(
-            signer: signer,
-            config: NDKSessionConfiguration(
-                dataRequirements: [.followList, .muteList],
-                preloadStrategy: .progressive
-            )
-        )
-        
-        // Create auth session for persistence
-        let session = try await ndkAuthManager.createSession(
-            with: signer,
-            requiresBiometric: false,
-            isHardwareBacked: false
-        )
-        
-        // Initialize declarative data sources
-        await initializeDataSources(for: session.pubkey)
-        
-        print("🎨 [OlasManager] createAccountFromNsec() completed successfully")
-        return session
-    }
-    
-    func logout() {
-        // Cancel profile observation
-        profileObservationTask?.cancel()
-        profileObservationTask = nil
-        currentUserProfile = nil
-        
-        
+    /// Logout and clear Olas-specific data
+    func olasLogout() async {
         // Clear wallet data
-        walletManager?.clearWalletData()
-        walletManager = nil
+        await clearWalletData()
         
-        // CRITICAL: Delete sessions from keychain BEFORE calling logout
-        // This prevents the bug where old sessions are restored on app restart
-        Task {
-            // 1. Clear cache data (optional but recommended for privacy)
-            if let cache = cache {
-                try? await cache.clear()
-                print("Cleared all cached data")
+        // Logout through auth manager
+        authManager?.logout()
+    }
+    
+    // MARK: - Wallet Management
+    
+    /// Load wallet for currently authenticated user
+    func loadCashuWallet() async throws {
+        print("🎨 [NostrManager] loadCashuWallet() called")
+        guard authManager?.isAuthenticated == true else {
+            print("🎨 [NostrManager] Not authenticated, throwing error")
+            throw NDKError.notConfigured("Not authenticated")
+        }
+        
+        guard isInitialized else {
+            print("🎨 [NostrManager] NDK not initialized, throwing error")
+            throw NDKError.notConfigured("NDK not initialized")
+        }
+        
+        isLoadingWallet = true
+        walletError = nil
+        
+        do {
+            print("🎨 [NostrManager] Creating NIP60Wallet instance")
+            let wallet = try NIP60Wallet(ndk: ndk)
+            
+            print("🎨 [NostrManager] Loading wallet...")
+            try await wallet.load()
+            
+            // Register with zap manager if available
+            if let zapManager = zapManager {
+                await zapManager.register(provider: wallet)
             }
             
-            // 2. Delete ALL sessions from keychain - this is critical!
-            // Must happen BEFORE ndkAuthManager.logout()
-            for session in ndkAuthManager.availableSessions {
-                try? await ndkAuthManager.deleteSession(session)
-            }
-            print("Deleted all sessions from keychain")
-            
-            // 3. NOW clear memory state after keychain is cleaned
-            await MainActor.run {
-                // Clear active authentication state
-                ndkAuthManager.logout()
-                
-                // Clear NDK signer
-                ndk?.signer = nil
-                
-                print("Logged out and cleared all authentication data")
-            }
-        }
-    }
-    
-    // MARK: - Auth State Management
-    
-    /// Check if user is authenticated via NDKAuth
-    var isAuthenticated: Bool {
-        ndkAuthManager.isAuthenticated
-    }
-    
-    /// Get auth manager for use in UI
-    var authManager: NDKAuthManager {
-        return ndkAuthManager
-    }
-    
-    /// Get current user from auth manager
-    var currentUser: NDKUser? {
-        get async {
-            guard ndkAuthManager.isAuthenticated else { return nil }
-            return try? await ndkAuthManager.activeSigner?.user()
-        }
-    }
-    
-    // MARK: - Declarative Data Sources
-    
-    private func initializeDataSources(for pubkey: String) async {
-        guard let ndk = ndk else { return }
-        
-        print("OlasManager - Initializing declarative data sources for user: \(pubkey.prefix(8))...")
-        
-        // Cancel any existing profile observation
-        profileObservationTask?.cancel()
-        
-        // Start observing user profile using NDKProfileManager
-        profileObservationTask = Task { @MainActor in
-            // Use maxAge of 3600 (1 hour) for the profile
-            for await profile in await ndk.profileManager.observe(for: pubkey, maxAge: 3600) {
-                self.currentUserProfile = profile
-            }
+            self.cashuWallet = wallet
+            print("🎨 [NostrManager] Wallet loaded successfully")
+        } catch {
+            print("🎨 [NostrManager] Failed to load wallet: \(error)")
+            walletError = error
+            throw error
         }
         
+        isLoadingWallet = false
+    }
+    
+    /// Clear wallet data and stop wallet operations
+    func clearWalletData() async {
+        print("🎨 [NostrManager] Clearing wallet data")
         
-        // Initialize wallet manager
-        walletManager = OlasWalletManager(nostrManager: self)
+        // Stop wallet operations
+        await cashuWallet?.stop()
+        cashuWallet = nil
+        walletError = nil
+        isLoadingWallet = false
         
-        // Initialize zap manager if needed
-        if zapManager == nil {
-            zapManager = NDKZapManager(ndk: ndk)
+        print("🎨 [NostrManager] Wallet data cleared")
+    }
+    
+    /// Configuration operations (batch updates)
+    func saveMintConfiguration(mintURLs: [String]) async throws {
+        guard let wallet = cashuWallet else {
+            throw NDKError.notConfigured("Not authenticated")
         }
         
+        // Get current relay configuration
+        let relays = await wallet.walletConfigRelays
+        
+        // Setup wallet with new mint configuration
+        try await wallet.setup(
+            mints: mintURLs,
+            relays: relays,
+            publishMintList: true
+        )
+        
+        print("🎨 [NostrManager] Saved mint configuration with \(mintURLs.count) mints")
+    }
+    
+    // MARK: - App-specific Features
+    
+    private func initializeAppFeatures() async {
         // Load wallet in the background
         Task {
             do {
-                try await walletManager?.loadWalletForCurrentUser()
+                try await loadCashuWallet()
                 print("🎨 [OlasManager] Wallet loaded successfully")
             } catch {
                 print("🎨 [OlasManager] Failed to load wallet: \(error)")
             }
         }
     }
-    
-    // MARK: - Relay Management
-    
-    /// Get all relays (default + user-added)
-    private func getAllRelays() -> [String] {
-        let userRelays = getUserAddedRelays()
-        let allRelays = defaultRelays + userRelays
-        return Array(Set(allRelays)) // Remove duplicates
-    }
-    
-    /// Get user-added relays from UserDefaults
-    private func getUserAddedRelays() -> [String] {
-        return UserDefaults.standard.stringArray(forKey: Self.userRelaysKey) ?? []
-    }
-    
-    /// Add a user relay and persist it
-    func addUserRelay(_ relayURL: String) async {
-        var userRelays = getUserAddedRelays()
-        guard !userRelays.contains(relayURL) && !defaultRelays.contains(relayURL) else {
-            print("OlasManager - Relay \(relayURL) already exists")
-            return
-        }
-        
-        userRelays.append(relayURL)
-        UserDefaults.standard.set(userRelays, forKey: Self.userRelaysKey)
-        
-        // Add relay to NDK
-        if let ndk = ndk {
-            await ndk.addRelay(relayURL)
-        }
-        
-        print("OlasManager - Added user relay: \(relayURL)")
-    }
-    
-    /// Remove a user relay and persist the change
-    func removeUserRelay(_ relayURL: String) async {
-        var userRelays = getUserAddedRelays()
-        userRelays.removeAll { $0 == relayURL }
-        UserDefaults.standard.set(userRelays, forKey: Self.userRelaysKey)
-        
-        // Remove relay from NDK (only if not a default relay)
-        if !defaultRelays.contains(relayURL), let ndk = ndk {
-            await ndk.removeRelay(relayURL)
-        }
-        
-        print("OlasManager - Removed user relay: \(relayURL)")
-    }
-    
-    /// Get list of user-added relays (for UI display)
-    var userAddedRelays: [String] {
-        return getUserAddedRelays()
-    }
-    
-    deinit {
-        Task { @MainActor in
-            profileObservationTask?.cancel()
-        }
-        print("🎨 NostrManager - Deallocated")
-    }
 }
 
 // MARK: - Error Types
 
-enum OlasError: LocalizedError {
-    case ndkNotInitialized
-    case invalidKey
-    case invalidPrivateKey
-    case profileCreationFailed
-    
-    var errorDescription: String? {
-        switch self {
-        case .ndkNotInitialized:
-            return "Network connection not ready. Please try again."
-        case .invalidKey, .invalidPrivateKey:
-            return "Invalid private key format."
-        case .profileCreationFailed:
-            return "Failed to create profile. Please try again."
-        }
-    }
-}
+// Use NDKError from NDKSwift instead of creating custom errors
+typealias OlasError = NDKError

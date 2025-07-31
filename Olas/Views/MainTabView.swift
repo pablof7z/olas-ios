@@ -48,40 +48,7 @@ struct MainTabView: View {
                 }
             
             // Profile Tab with Wallet & Analytics Access
-            Group {
-                if let session = nostrManager.authManager.activeSession {
-                    NavigationStack {
-                        ProfileView(pubkey: session.pubkey)
-                            .toolbar {
-                                ToolbarItem(placement: .navigationBarTrailing) {
-                                    HStack(spacing: 16) {
-                                        // Analytics
-                                        NavigationLink(destination: AnalyticsDashboardView().environment(nostrManager)) {
-                                            Image(systemName: "chart.line.uptrend.xyaxis")
-                                                .foregroundStyle(OlasDesign.Colors.primary)
-                                        }
-                                        
-                                        // Wallet
-                                        if let walletManager = nostrManager.walletManager {
-                                            NavigationLink(destination: OlasWalletView(walletManager: walletManager, nostrManager: nostrManager)) {
-                                                Image(systemName: "bolt.circle")
-                                                    .foregroundStyle(OlasDesign.Colors.primary)
-                                            }
-                                        } else {
-                                            Image(systemName: "bolt.circle")
-                                                .foregroundStyle(OlasDesign.Colors.textTertiary)
-                                                .onTapGesture {
-                                                    print("Wallet manager not initialized yet")
-                                                }
-                                        }
-                                    }
-                                }
-                            }
-                    }
-                } else {
-                    Text("Profile")
-                }
-            }
+            profileTab
             .tabItem {
                 Label("Profile", systemImage: selectedTab == 3 ? "person.circle.fill" : "person.circle")
             }
@@ -102,6 +69,52 @@ struct MainTabView: View {
         }
         .onAppear {
             setupTabBarAppearance()
+        }
+    }
+    
+    @ViewBuilder
+    private var profileTab: some View {
+        if let session = nostrManager.authManager?.activeSession {
+            NavigationStack {
+                ProfileView(pubkey: session.pubkey)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            profileToolbarContent
+                        }
+                    }
+            }
+        } else {
+            Text("Profile")
+        }
+    }
+    
+    @ViewBuilder
+    private var profileToolbarContent: some View {
+        HStack(spacing: 16) {
+            // Analytics
+            NavigationLink(destination: AnalyticsDashboardView().environment(nostrManager)) {
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .foregroundStyle(OlasDesign.Colors.primary)
+            }
+            
+            // Wallet
+            walletToolbarItem
+        }
+    }
+    
+    @ViewBuilder
+    private var walletToolbarItem: some View {
+        if nostrManager.cashuWallet != nil {
+            NavigationLink(destination: OlasWalletView()) {
+                Image(systemName: "bolt.circle")
+                    .foregroundStyle(OlasDesign.Colors.primary)
+            }
+        } else {
+            Image(systemName: "bolt.circle")
+                .foregroundStyle(OlasDesign.Colors.textTertiary)
+                .onTapGesture {
+                    print("Wallet not initialized yet")
+                }
         }
     }
     

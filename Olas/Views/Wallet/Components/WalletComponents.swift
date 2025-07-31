@@ -170,6 +170,7 @@ struct EmptyActivityView: View {
 // MARK: - Transaction History View
 struct TransactionHistoryView: View {
     @ObservedObject var walletManager: OlasWalletManager
+    let nostrManager: NostrManager
     @State private var searchText = ""
     @State private var selectedFilter: TransactionFilter = .all
     @State private var recentTransactions: [WalletTransaction] = []
@@ -201,86 +202,95 @@ struct TransactionHistoryView: View {
         }
     }
     
+    @ViewBuilder
+    private var searchBar: some View {
+        HStack {
+            Image(systemName: "magnifyingglass")
+                .foregroundColor(OlasDesign.Colors.textTertiary)
+            
+            TextField("Search transactions", text: $searchText)
+                .textFieldStyle(PlainTextFieldStyle())
+        }
+        .padding(OlasDesign.Spacing.sm)
+        .background(
+            RoundedRectangle(cornerRadius: OlasDesign.CornerRadius.sm)
+                .fill(OlasDesign.Colors.surface)
+        )
+    }
+    
+    @ViewBuilder
+    private var filterPills: some View {
+        HStack(spacing: OlasDesign.Spacing.sm) {
+            ForEach(TransactionFilter.allCases, id: \.self) { filter in
+                FilterPill(
+                    title: filter.rawValue,
+                    icon: filter.icon,
+                    isSelected: selectedFilter == filter
+                ) {
+                    withAnimation(.spring(response: 0.3)) {
+                        selectedFilter = filter
+                    }
+                }
+            }
+            
+            Spacer()
+        }
+    }
+    
+    @ViewBuilder
+    private var transactionList: some View {
+        if filteredTransactions.isEmpty {
+            Spacer()
+            EmptyStateView(
+                icon: "magnifyingglass",
+                title: "No transactions found",
+                subtitle: selectedFilter == .all ? 
+                    "Try adjusting your search" : 
+                    "No \(selectedFilter.rawValue.lowercased()) transactions"
+            )
+            Spacer()
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(filteredTransactions) { transaction in
+                        VStack(spacing: 0) {
+                            ModernTransactionRow(transaction: transaction, nostrManager: nostrManager)
+                                .padding(.horizontal, OlasDesign.Spacing.md)
+                            
+                            if transaction.id != filteredTransactions.last?.id {
+                                Divider()
+                                    .padding(.leading, 60)
+                            }
+                        }
+                    }
+                }
+                .background(
+                    RoundedRectangle(cornerRadius: OlasDesign.CornerRadius.lg)
+                        .fill(OlasDesign.Colors.surface)
+                )
+                .padding(.horizontal, OlasDesign.Spacing.md)
+            }
+        }
+    }
+    
     var body: some View {
         ZStack {
             OlasDesign.Colors.background
                 .ignoresSafeArea()
             
             VStack(spacing: 0) {
-                // Search and filters
                 VStack(spacing: OlasDesign.Spacing.md) {
-                    // Search bar
-                    HStack {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundColor(OlasDesign.Colors.textTertiary)
-                        
-                        TextField("Search transactions", text: $searchText)
-                            .textFieldStyle(PlainTextFieldStyle())
-                    }
-                    .padding(OlasDesign.Spacing.sm)
-                    .background(
-                        RoundedRectangle(cornerRadius: OlasDesign.CornerRadius.sm)
-                            .fill(OlasDesign.Colors.surface)
-                    )
-                    
-                    // Filter pills
-                    HStack(spacing: OlasDesign.Spacing.sm) {
-                        ForEach(TransactionFilter.allCases, id: \.self) { filter in
-                            FilterPill(
-                                title: filter.rawValue,
-                                icon: filter.icon,
-                                isSelected: selectedFilter == filter
-                            ) {
-                                withAnimation(.spring(response: 0.3)) {
-                                    selectedFilter = filter
-                                }
-                            }
-                        }
-                        
-                        Spacer()
-                    }
+                    searchBar
+                    filterPills
                 }
                 .padding(OlasDesign.Spacing.md)
                 
-                // Transaction list
-                if filteredTransactions.isEmpty {
-                    Spacer()
-                    EmptyStateView(
-                        icon: "magnifyingglass",
-                        title: "No transactions found",
-                        subtitle: selectedFilter == .all ? 
-                            "Try adjusting your search" : 
-                            "No \(selectedFilter.rawValue.lowercased()) transactions"
-                    )
-                    Spacer()
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(filteredTransactions) { transaction in
-                                VStack(spacing: 0) {
-                                    ModernTransactionRow(transaction: transaction, walletManager: walletManager)
-                                        .padding(.horizontal, OlasDesign.Spacing.md)
-                                    
-                                    if transaction.id != filteredTransactions.last?.id {
-                                        Divider()
-                                            .padding(.leading, 60)
-                                    }
-                                }
-                            }
-                        }
-                        .background(
-                            RoundedRectangle(cornerRadius: OlasDesign.CornerRadius.lg)
-                                .fill(OlasDesign.Colors.surface)
-                        )
-                        .padding(.horizontal, OlasDesign.Spacing.md)
-                    }
-                }
+                transactionList
             }
         }
         .navigationTitle("Transaction History")
         .navigationBarTitleDisplayMode(.large)
         .task {
-            // Load transactions
             recentTransactions = await walletManager.transactions
         }
     }

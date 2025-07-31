@@ -1,9 +1,10 @@
 import SwiftUI
 import NDKSwift
 import CoreImage.CIFilterBuiltins
+import CashuSwift
+
 
 struct SendView: View {
-    @ObservedObject var walletManager: OlasWalletManager
     @Environment(NostrManager.self) private var nostrManager
     @Environment(\.dismiss) var dismiss
     
@@ -101,7 +102,11 @@ struct SendView: View {
                 }
             }
             .task {
-                currentBalance = await walletManager.currentBalance
+                guard let wallet = nostrManager.cashuWallet else {
+                    currentBalance = 0
+                    return
+                }
+                currentBalance = (try? await wallet.getBalance()) ?? 0
             }
         }
     }
@@ -410,7 +415,10 @@ struct SendView: View {
             switch sendMode {
             case .lightning:
                 // For lightning, we'll pass 0 as amount since it's in the invoice
-                _ = try await walletManager.payLightning(invoice: invoice, amount: 0)
+                guard let wallet = nostrManager.cashuWallet else {
+                    throw WalletError.noActiveWallet
+                }
+                _ = try await wallet.payLightning(invoice: invoice, amount: 0)
                 OlasDesign.Haptic.success()
                 showingSuccess = true
                 
@@ -421,10 +429,24 @@ struct SendView: View {
                     return
                 }
                 
-                let token = try await walletManager.send(
+                guard let wallet = nostrManager.cashuWallet else {
+                    throw WalletError.noActiveWallet
+                }
+                
+                // Get P2PK pubkey for locking
+                let p2pkPubkey = try await wallet.getP2PKPubkey()
+                
+                // Select mint for amount
+                let selectedMint = try await selectMintForAmount(amountSats, wallet: wallet)
+                
+                // Send tokens (creates P2PK locked proofs)
+                let (proofs, _) = try await wallet.send(
                     amount: amountSats,
-                    memo: comment.isEmpty ? nil : comment
+                    to: p2pkPubkey,
+                    mint: selectedMint
                 )
+                
+                let token = try createTokenString(from: proofs, memo: comment.isEmpty ? nil : comment, amount: amountSats, mintURL: selectedMint)
                 
                 ecashToken = token
                 OlasDesign.Haptic.success()
@@ -459,6 +481,44 @@ struct SendView: View {
             return "\(sats / 1000)k"
         }
         return "\(sats)"
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func selectMintForAmount(_ amount: Int64, wallet: NIP60Wallet) async throws -> URL {
+        // Auto-select mint with sufficient balance
+        let mintURLs = await wallet.mints.getMintURLs()
+        let mints = mintURLs.compactMap { URL(string: $0) }
+        
+        for mint in mints {
+            let balance = await wallet.getBalance(mint: mint)
+            if balance >= amount {
+                return mint
+            }
+        }
+        
+        throw WalletError.insufficientBalance
+    }
+    
+    private func createTokenString(from proofs: [CashuSwift.Proof], memo: String?, amount: Int64, mintURL: URL) throws -> String {
+        
+        // Create token from proofs
+        let token = CashuSwift.Token(
+            proofs: [mintURL.absoluteString: proofs],
+            unit: "sat",
+            memo: memo
+        )
+        
+        // Encode token
+        let tokenData = try NDKSwift.JSONCoding.encoder.encode(token)
+        
+        // Create base64url encoded token
+        let base64Token = tokenData.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        
+        return "cashuA\(base64Token)"
     }
 }
 

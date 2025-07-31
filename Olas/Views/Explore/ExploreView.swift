@@ -103,13 +103,13 @@ struct ExploreView: View {
             .navigationBarTitleDisplayMode(.large)
             #endif
             .task {
-                if let ndk = nostrManager.ndk {
-                    viewModel.startObserving(ndk: ndk, category: selectedCategory)
+                if nostrManager.isInitialized {
+                    viewModel.startObserving(ndk: nostrManager.ndk, category: selectedCategory)
                 }
             }
             .onChange(of: selectedCategory) { _, newCategory in
-                if let ndk = nostrManager.ndk {
-                    viewModel.changeCategory(to: newCategory, ndk: ndk)
+                if nostrManager.isInitialized {
+                    viewModel.changeCategory(to: newCategory, ndk: nostrManager.ndk)
                 }
             }
             .sheet(isPresented: $showingHashtagView) {
@@ -197,7 +197,7 @@ struct ExploreView: View {
             ForEach(Array(filteredPosts.enumerated()), id: \.element.id) { index, item in
                 ExploreGridItem(
                     post: item.event,
-                    profile: item.profile,
+                    metadata: item.metadata,
                     height: gridHeights[index % gridHeights.count]
                 )
             }
@@ -281,18 +281,17 @@ class ExploreViewModel: ObservableObject {
             
             if category == .trending {
                 // For trending, get both kind 20 (picture posts) and kind 1 with images
-                filter = NDKFilter(kinds: [20, 1], limit: 200)
+                filter = NDKFilter(kinds: [20, 1])
             } else {
                 // For specific categories, filter by hashtag
                 filter = NDKFilter(
                     kinds: [20, 1],
-                    limit: 100,
                     tags: ["t": Set([category.hashtag])]
                 )
             }
             
             // Create data source with reactive pattern
-            let dataSource = ndk.observe(
+            let dataSource = ndk.subscribe(
                 filter: filter,
                 maxAge: 0,  // Real-time updates
                 cachePolicy: .cacheWithNetwork
@@ -359,20 +358,20 @@ class ExploreViewModel: ObservableObject {
         profileTasks[pubkey] = Task {
             guard let profileManager = ndk.profileManager else { return }
             
-            for await profile in await profileManager.observe(for: pubkey, maxAge: 3600) {
-                if let profile = profile {
+            for await metadata in await profileManager.subscribe(for: pubkey, maxAge: 3600) {
+                if let metadata = metadata {
                     await MainActor.run {
-                        updateItemsWithProfile(pubkey: pubkey, profile: profile)
+                        updateItemsWithMetadata(pubkey: pubkey, metadata: metadata)
                     }
                 }
             }
         }
     }
     
-    private func updateItemsWithProfile(pubkey: String, profile: NDKUserProfile) {
+    private func updateItemsWithMetadata(pubkey: String, metadata: NDKUserMetadata) {
         for index in items.indices {
             if items[index].event.pubkey == pubkey {
-                items[index].profile = profile
+                items[index].metadata = metadata
             }
         }
     }
@@ -396,7 +395,7 @@ struct ExploreItem: Identifiable {
     let id: String
     let event: NDKEvent
     let imageUrls: [String]
-    var profile: NDKUserProfile?
+    var metadata: NDKUserMetadata?
     
     init(event: NDKEvent, imageUrls: [String]) {
         self.id = event.id

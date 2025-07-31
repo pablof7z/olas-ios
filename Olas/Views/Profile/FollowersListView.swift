@@ -1,5 +1,6 @@
 import SwiftUI
 import NDKSwift
+import NDKSwiftUI
 
 struct FollowersListView: View {
     let pubkey: String
@@ -57,8 +58,8 @@ struct FollowersListView: View {
                 }
             }
             .task {
-                if let ndk = nostrManager.ndk {
-                    await viewModel.loadUsers(pubkey: pubkey, mode: mode, ndk: ndk)
+                if nostrManager.isInitialized {
+                    await viewModel.loadUsers(pubkey: pubkey, mode: mode, ndk: nostrManager.ndk)
                 }
             }
         }
@@ -99,8 +100,8 @@ struct FollowersListView: View {
             return viewModel.users
         } else {
             return viewModel.users.filter { user in
-                user.profile?.name?.localizedCaseInsensitiveContains(searchText) ?? false ||
-                user.profile?.displayName?.localizedCaseInsensitiveContains(searchText) ?? false ||
+                user.metadata?.name?.localizedCaseInsensitiveContains(searchText) ?? false ||
+                user.metadata?.displayName?.localizedCaseInsensitiveContains(searchText) ?? false ||
                 user.pubkey.localizedCaseInsensitiveContains(searchText)
             }
         }
@@ -211,26 +212,26 @@ struct FollowUserRow: View {
             Button {
                 showProfile = true
             } label: {
-                OlasAvatar(
-                    url: user.profile?.picture,
-                    size: 50,
-                    pubkey: user.pubkey
+                NDKUIProfilePicture(
+                    ndk: nostrManager.ndk,
+                    pubkey: user.pubkey,
+                    size: 50
                 )
             }
             
             // User info
             VStack(alignment: .leading, spacing: 2) {
-                Text(user.profile?.displayName ?? user.profile?.name ?? "User")
+                Text(user.metadata?.displayName ?? user.metadata?.name ?? "User")
                     .font(OlasDesign.Typography.bodyMedium)
                     .foregroundColor(OlasDesign.Colors.text)
                     .lineLimit(1)
                 
-                Text("@\(user.profile?.name ?? String(user.pubkey.prefix(16)))")
+                Text("@\(user.metadata?.name ?? String(user.pubkey.prefix(16)))")
                     .font(OlasDesign.Typography.caption)
                     .foregroundColor(OlasDesign.Colors.textSecondary)
                     .lineLimit(1)
                 
-                if let about = user.profile?.about {
+                if let about = user.metadata?.about {
                     Text(about)
                         .font(OlasDesign.Typography.caption)
                         .foregroundColor(OlasDesign.Colors.textSecondary)
@@ -242,7 +243,7 @@ struct FollowUserRow: View {
             Spacer()
             
             // Follow button
-            if user.pubkey != nostrManager.authManager.activeSession?.pubkey {
+            if user.pubkey != nostrManager.authManager?.activeSession?.pubkey {
                 Button {
                     Task {
                         await toggleFollow()
@@ -289,7 +290,8 @@ struct FollowUserRow: View {
     }
     
     private func checkFollowStatus() async {
-        guard let ndk = nostrManager.ndk else { return }
+        guard nostrManager.isInitialized else { return }
+        let ndk = nostrManager.ndk
         
         do {
             let contactList = try await ndk.fetchContactList()
@@ -306,7 +308,8 @@ struct FollowUserRow: View {
     }
     
     private func toggleFollow() async {
-        guard let ndk = nostrManager.ndk else { return }
+        guard nostrManager.isInitialized else { return }
+        let ndk = nostrManager.ndk
         
         isLoading = true
         defer { isLoading = false }
@@ -357,7 +360,7 @@ class FollowersViewModel: ObservableObject {
             limit: 1000
         )
         
-        let dataSource = ndk.observe(
+        let dataSource = ndk.subscribe(
             filter: filter,
             maxAge: 0,
             cachePolicy: .cacheWithNetwork
@@ -388,11 +391,10 @@ class FollowersViewModel: ObservableObject {
         // Load contact list for this user
         let filter = NDKFilter(
             authors: [pubkey],
-            kinds: [3],
-            limit: 1
+            kinds: [3]
         )
         
-        let dataSource = ndk.observe(
+        let dataSource = ndk.subscribe(
             filter: filter,
             maxAge: 0,
             cachePolicy: .cacheWithNetwork
@@ -420,11 +422,11 @@ class FollowersViewModel: ObservableObject {
         
         for (index, user) in users.enumerated() {
             Task {
-                for await profile in await profileManager.observe(for: user.pubkey, maxAge: 3600) {
-                    if let profile = profile {
+                for await metadata in await profileManager.subscribe(for: user.pubkey, maxAge: 3600) {
+                    if let metadata = metadata {
                         await MainActor.run {
                             if index < self.users.count {
-                                self.users[index].profile = profile
+                                self.users[index].metadata = metadata
                             }
                         }
                     }
@@ -439,7 +441,7 @@ class FollowersViewModel: ObservableObject {
 struct FollowUser: Identifiable {
     let id = UUID()
     let pubkey: String
-    var profile: NDKUserProfile?
+    var metadata: NDKUserMetadata?
 }
 
 // MARK: - Shimmer Modifier

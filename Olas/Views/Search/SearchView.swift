@@ -1,5 +1,6 @@
 import SwiftUI
 import NDKSwift
+import NDKSwiftUI
 
 struct SearchView: View {
     @Environment(NostrManager.self) private var nostrManager
@@ -435,30 +436,31 @@ struct SearchHistoryRow: View {
 struct UserSearchRow: View {
     let user: SearchUser
     @State private var showProfile = false
+    @Environment(NostrManager.self) private var nostrManager
     
     var body: some View {
         Button {
             showProfile = true
         } label: {
             HStack(spacing: OlasDesign.Spacing.md) {
-                OlasAvatar(
-                    url: user.profile?.picture,
-                    size: 54,
-                    pubkey: user.pubkey
+                NDKUIProfilePicture(
+                    ndk: nostrManager.ndk,
+                    pubkey: user.pubkey,
+                    size: 54
                 )
                 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(user.profile?.displayName ?? user.profile?.name ?? "User")
+                    Text(user.metadata?.displayName ?? user.metadata?.name ?? "User")
                         .font(OlasDesign.Typography.bodyMedium)
                         .foregroundColor(OlasDesign.Colors.text)
                         .lineLimit(1)
                     
-                    Text("@\(user.profile?.name ?? String(user.pubkey.prefix(16)))")
+                    Text("@\(user.metadata?.name ?? String(user.pubkey.prefix(16)))")
                         .font(OlasDesign.Typography.caption)
                         .foregroundColor(OlasDesign.Colors.textSecondary)
                         .lineLimit(1)
                     
-                    if let about = user.profile?.about {
+                    if let about = user.metadata?.about {
                         Text(about)
                             .font(OlasDesign.Typography.caption)
                             .foregroundColor(OlasDesign.Colors.textTertiary)
@@ -660,32 +662,28 @@ class SearchViewModel: ObservableObject {
             limit: 20
         )
         
-        do {
-            let dataSource = ndk.observe(filter: filter)
-            let events = await dataSource.collect(timeout: 5.0)
+        let dataSource = ndk.subscribe(filter: filter)
+        let events = await dataSource.collect(timeout: 5.0)
+        
+        var users: [SearchUser] = []
+        
+        for event in events {
+            let metadata = NDKUserMetadata(event: event)
             
-            var users: [SearchUser] = []
+            // Check if name or display name matches query
+            let nameMatch = metadata.name?.localizedCaseInsensitiveContains(query) ?? false
+            let displayNameMatch = metadata.displayName?.localizedCaseInsensitiveContains(query) ?? false
             
-            for event in events {
-                guard let metadata = try? JSONDecoder().decode(NDKUserProfile.self, from: Data(event.content.utf8)) else { continue }
-                
-                // Check if name or display name matches query
-                let nameMatch = metadata.name?.localizedCaseInsensitiveContains(query) ?? false
-                let displayNameMatch = metadata.displayName?.localizedCaseInsensitiveContains(query) ?? false
-                
-                if nameMatch || displayNameMatch {
-                    let user = SearchUser(
-                        pubkey: event.pubkey,
-                        profile: metadata
-                    )
-                    users.append(user)
-                }
+            if nameMatch || displayNameMatch {
+                let user = SearchUser(
+                    pubkey: event.pubkey,
+                    metadata: metadata
+                )
+                users.append(user)
             }
-            
-            self.searchUsers = users
-        } catch {
-            print("Failed to search users: \(error)")
         }
+        
+        self.searchUsers = users
     }
     
     private func searchForPosts(query: String, ndk: NDK) async {
@@ -696,7 +694,7 @@ class SearchViewModel: ObservableObject {
         )
         
         do {
-            let dataSource = ndk.observe(filter: filter)
+            let dataSource = ndk.subscribe(filter: filter)
             let events = await dataSource.collect(timeout: 5.0)
             
             var posts: [SearchPost] = []
@@ -746,19 +744,15 @@ class SearchViewModel: ObservableObject {
             limit: 10
         )
         
-        do {
-            let dataSource = ndk.observe(filter: filter)
-            let events = await dataSource.collect(timeout: 5.0)
-            
-            let users = events.compactMap { event -> SearchUser? in
-                guard let metadata = try? JSONDecoder().decode(NDKUserProfile.self, from: Data(event.content.utf8)) else { return nil }
-                return SearchUser(pubkey: event.pubkey, profile: metadata)
-            }
-            
-            self.suggestedUsers = Array(users.prefix(5))
-        } catch {
-            print("Failed to load suggested users: \(error)")
+        let dataSource = ndk.subscribe(filter: filter)
+        let events = await dataSource.collect(timeout: 5.0)
+        
+        let users = events.compactMap { event -> SearchUser? in
+            let metadata = NDKUserMetadata(event: event)
+            return SearchUser(pubkey: event.pubkey, metadata: metadata)
         }
+        
+        self.suggestedUsers = Array(users.prefix(5))
     }
 }
 
@@ -766,7 +760,7 @@ class SearchViewModel: ObservableObject {
 struct SearchUser: Identifiable {
     let id = UUID()
     let pubkey: String
-    let profile: NDKUserProfile?
+    let metadata: NDKUserMetadata?
 }
 
 struct SearchPost: Identifiable {

@@ -281,7 +281,7 @@ struct LoginSheet: View {
         
         Task {
             do {
-                try await nostrManager.login(with: privateKey)
+                try await nostrManager.olasLogin(with: privateKey)
                 OlasDesign.Haptic.success()
                 await MainActor.run {
                     dismiss()

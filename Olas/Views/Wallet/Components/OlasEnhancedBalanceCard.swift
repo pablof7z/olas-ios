@@ -2,7 +2,7 @@ import SwiftUI
 import Charts
 
 struct OlasEnhancedBalanceCard: View {
-    @ObservedObject var walletManager: OlasWalletManager
+    @Environment(NostrManager.self) private var nostrManager
     @State private var isExpanded = false
     @State private var showingBreakdown = false
     @State private var selectedMint: String?
@@ -73,7 +73,7 @@ struct OlasEnhancedBalanceCard: View {
         .task {
             await loadBalances()
         }
-        .onChange(of: walletManager.wallet != nil) {
+        .onChange(of: nostrManager.cashuWallet != nil) { _, _ in
             Task {
                 await loadBalances()
             }
@@ -248,8 +248,23 @@ struct OlasEnhancedBalanceCard: View {
     }
     
     private func loadBalances() async {
-        totalBalance = await walletManager.currentBalance
-        mintBalances = await walletManager.getAllMintBalances()
+        guard let wallet = nostrManager.cashuWallet else {
+            totalBalance = 0
+            mintBalances = [:]
+            return
+        }
+        
+        totalBalance = (try? await wallet.getBalance()) ?? 0
+        
+        let mintURLs = await wallet.mints.getMintURLs()
+        var balances: [String: Int64] = [:]
+        for mintString in mintURLs {
+            if let mintURL = URL(string: mintString) {
+                let balance = await wallet.getBalance(mint: mintURL)
+                balances[mintString] = balance
+            }
+        }
+        mintBalances = balances
     }
     
     private func startAngle(for index: Int) -> CGFloat {

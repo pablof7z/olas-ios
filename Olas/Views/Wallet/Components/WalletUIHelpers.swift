@@ -51,7 +51,7 @@ struct PulsingIcon: View {
 
 // MARK: - Mint Distribution Preview
 struct MintDistributionPreview: View {
-    @ObservedObject var walletManager: OlasWalletManager
+    @Environment(NostrManager.self) private var nostrManager
     @State private var mintURLs: [String] = []
     
     private let mintColors: [Color] = [
@@ -98,7 +98,8 @@ struct MintDistributionPreview: View {
                 )
         )
         .task {
-            mintURLs = await walletManager.getActiveMintURLs()
+            guard let wallet = nostrManager.cashuWallet else { return }
+            mintURLs = await wallet.mints.getMintURLs()
         }
     }
 }
@@ -150,7 +151,7 @@ struct ShareSheet: View {
 // MARK: - Modern Transaction Row
 struct ModernTransactionRow: View {
     let transaction: WalletTransaction
-    @ObservedObject var walletManager: OlasWalletManager
+    let nostrManager: NostrManager
     @State private var showDetail = false
     @State private var animateIn = false
     
@@ -259,7 +260,7 @@ struct ModernTransactionRow: View {
         }
         .buttonStyle(PlainButtonStyle())
         .sheet(isPresented: $showDetail) {
-            TransactionDetailView(transaction: transaction, walletManager: walletManager)
+            TransactionDetailView(transaction: transaction, nostrManager: nostrManager)
         }
         .onAppear {
             withAnimation(.spring(response: 0.5, dampingFraction: 0.8).delay(0.1)) {

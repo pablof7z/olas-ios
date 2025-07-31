@@ -1,5 +1,6 @@
 import SwiftUI
 import NDKSwift
+import NDKSwiftUI
 
 struct ReplyView: View {
     let parentEvent: NDKEvent
@@ -17,7 +18,7 @@ struct ReplyView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         // Parent post header
-                        ParentPostHeader(event: parentEvent, profile: viewModel.parentProfile)
+                        ParentPostHeader(event: parentEvent, metadata: viewModel.parentMetadata)
                             .padding(OlasDesign.Spacing.md)
                             .background(OlasDesign.Colors.surface)
                         
@@ -57,18 +58,18 @@ struct ReplyView: View {
                     
                     HStack(alignment: .bottom, spacing: OlasDesign.Spacing.sm) {
                         // User avatar
-                        if let currentUser = nostrManager.currentUserProfile {
-                            OlasAvatar(
-                                url: currentUser.picture,
-                                size: 32,
-                                pubkey: nostrManager.authManager.activeSession?.pubkey ?? ""
+                        if let pubkey = nostrManager.authManager?.activeSession?.pubkey {
+                            NDKUIProfilePicture(
+                                ndk: nostrManager.ndk,
+                                pubkey: pubkey,
+                                size: 32
                             )
                         }
                         
                         // Reply field
                         VStack(alignment: .leading, spacing: 4) {
                             if isReplying {
-                                Text("Replying to @\(viewModel.parentProfile?.name ?? "...")")
+                                Text("Replying to @\(viewModel.parentMetadata?.name ?? "...")")
                                     .font(OlasDesign.Typography.caption)
                                     .foregroundColor(OlasDesign.Colors.textSecondary)
                             }
@@ -133,18 +134,19 @@ struct ReplyView: View {
             }
             #endif
             .onAppear {
-                if let ndk = nostrManager.ndk {
-                    viewModel.loadReplies(for: parentEvent, ndk: ndk)
+                if nostrManager.isInitialized {
+                    viewModel.loadReplies(for: parentEvent, ndk: nostrManager.ndk)
                 }
             }
         }
     }
     
     private func sendReply() {
-        guard let ndk = nostrManager.ndk,
-              let signer = NDKAuthManager.shared.activeSigner,
+        guard nostrManager.isInitialized,
+              let signer = nostrManager.authManager?.activeSigner,
               !replyText.isEmpty else { return }
         
+        let ndk = nostrManager.ndk
         isReplying = true
         OlasDesign.Haptic.selection()
         
@@ -175,23 +177,24 @@ struct ReplyView: View {
 
 struct ParentPostHeader: View {
     let event: NDKEvent
-    let profile: NDKUserProfile?
+    let metadata: NDKUserMetadata?
+    @Environment(NostrManager.self) private var nostrManager
     
     var body: some View {
         VStack(alignment: .leading, spacing: OlasDesign.Spacing.sm) {
             HStack(spacing: OlasDesign.Spacing.sm) {
-                OlasAvatar(
-                    url: profile?.picture,
-                    size: 40,
-                    pubkey: event.pubkey
+                NDKUIProfilePicture(
+                    ndk: nostrManager.ndk,
+                    pubkey: event.pubkey,
+                    size: 40
                 )
                 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(profile?.displayName ?? profile?.name ?? "Loading...")
+                    Text(metadata?.displayName ?? metadata?.name ?? "Loading...")
                         .font(OlasDesign.Typography.bodyMedium)
                         .foregroundColor(OlasDesign.Colors.text)
                     
-                    Text("@\(profile?.name ?? String(event.pubkey.prefix(8)))")
+                    Text("@\(metadata?.name ?? String(event.pubkey.prefix(8)))")
                         .font(OlasDesign.Typography.caption)
                         .foregroundColor(OlasDesign.Colors.textSecondary)
                 }
@@ -203,10 +206,16 @@ struct ParentPostHeader: View {
                     .foregroundColor(OlasDesign.Colors.textTertiary)
             }
             
-            OlasRichText(
+            NDKUIRichTextView(
                 content: event.content,
-                tags: event.tags
+                tags: event.tags.map { Tag($0) },
+                showLinkPreviews: false,
+                style: .compact
             )
+            .environment(\.ndk, nostrManager.ndk)
+            .font(OlasDesign.Typography.body)
+            .foregroundColor(OlasDesign.Colors.text)
+            .tint(Color.white)
         }
     }
     
@@ -222,23 +231,24 @@ struct ReplyItemView: View {
     let reply: ReplyItem
     @EnvironmentObject var appState: AppState
     @State private var showingNestedReplies = false
+    @Environment(NostrManager.self) private var nostrManager
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: OlasDesign.Spacing.sm) {
-                OlasAvatar(
-                    url: reply.profile?.picture,
-                    size: 32,
-                    pubkey: reply.event.pubkey
+                NDKUIProfilePicture(
+                    ndk: nostrManager.ndk,
+                    pubkey: reply.event.pubkey,
+                    size: 32
                 )
                 
                 VStack(alignment: .leading, spacing: OlasDesign.Spacing.xs) {
                     HStack(spacing: OlasDesign.Spacing.xs) {
-                        Text(reply.profile?.displayName ?? reply.profile?.name ?? "Loading...")
+                        Text(reply.metadata?.displayName ?? reply.metadata?.name ?? "Loading...")
                             .font(OlasDesign.Typography.bodyMedium)
                             .foregroundColor(OlasDesign.Colors.text)
                         
-                        Text("@\(reply.profile?.name ?? String(reply.event.pubkey.prefix(8)))")
+                        Text("@\(reply.metadata?.name ?? String(reply.event.pubkey.prefix(8)))")
                             .font(OlasDesign.Typography.caption)
                             .foregroundColor(OlasDesign.Colors.textSecondary)
                         
@@ -253,10 +263,16 @@ struct ReplyItemView: View {
                         Spacer()
                     }
                     
-                    OlasRichText(
+                    NDKUIRichTextView(
                         content: reply.event.content,
-                        tags: reply.event.tags
+                        tags: reply.event.tags.map { Tag($0) },
+                        showLinkPreviews: false,
+                        style: .compact
                     )
+                    .environment(\.ndk, nostrManager.ndk)
+                    .font(OlasDesign.Typography.body)
+                    .foregroundColor(OlasDesign.Colors.text)
+                    .tint(Color.white)
                     .fixedSize(horizontal: false, vertical: true)
                     
                     // Reply actions
@@ -324,7 +340,7 @@ struct EmptyRepliesView: View {
 @MainActor
 class ReplyViewModel: ObservableObject {
     @Published var replies: [ReplyItem] = []
-    @Published var parentProfile: NDKUserProfile?
+    @Published var parentMetadata: NDKUserMetadata?
     @Published var isLoading = false
     private var profileTasks: [String: Task<Void, Never>] = [:]
     
@@ -334,10 +350,10 @@ class ReplyViewModel: ObservableObject {
         Task {
             // Load parent profile
             if let profileManager = ndk.profileManager {
-                for await profile in await profileManager.observe(for: event.pubkey, maxAge: 3600) {
-                    if let profile = profile {
+                for await metadata in await profileManager.subscribe(for: event.pubkey, maxAge: 3600) {
+                    if let metadata = metadata {
                         await MainActor.run {
-                            self.parentProfile = profile
+                            self.parentMetadata = metadata
                         }
                         break
                     }
@@ -348,12 +364,11 @@ class ReplyViewModel: ObservableObject {
             let filter = NDKFilter(
                 kinds: [EventKind.genericReply],
                 tags: [
-                    "E": Set([event.id]),  // Comments on this root event
-                    "e": Set([event.id])   // Or direct parent references
+                    "E": Set([event.id])  // Comments on this root event
                 ]
             )
             
-            let dataSource = ndk.observe(filter: filter, cachePolicy: .cacheWithNetwork)
+            let dataSource = ndk.subscribe(filter: filter, cachePolicy: .cacheWithNetwork)
             
             for await replyEvent in dataSource.events {
                 // Check if this is a direct reply to our event (NIP-22)
@@ -394,20 +409,20 @@ class ReplyViewModel: ObservableObject {
         profileTasks[pubkey] = Task {
             guard let profileManager = ndk.profileManager else { return }
             
-            for await profile in await profileManager.observe(for: pubkey, maxAge: 3600) {
-                if let profile = profile {
+            for await metadata in await profileManager.subscribe(for: pubkey, maxAge: 3600) {
+                if let metadata = metadata {
                     await MainActor.run {
-                        updateRepliesWithProfile(pubkey: pubkey, profile: profile)
+                        updateRepliesWithMetadata(pubkey: pubkey, metadata: metadata)
                     }
                 }
             }
         }
     }
     
-    private func updateRepliesWithProfile(pubkey: String, profile: NDKUserProfile) {
+    private func updateRepliesWithMetadata(pubkey: String, metadata: NDKUserMetadata) {
         for index in replies.indices {
             if replies[index].event.pubkey == pubkey {
-                replies[index].profile = profile
+                replies[index].metadata = metadata
             }
         }
     }
@@ -422,7 +437,7 @@ class ReplyViewModel: ObservableObject {
                 ]
             )
             
-            let dataSource = ndk.observe(filter: filter, cachePolicy: .cacheOnly)
+            let dataSource = ndk.subscribe(filter: filter, cachePolicy: .cacheOnly)
             let nestedReplies = await dataSource.collect(timeout: 1.0)
             let count = nestedReplies.filter { reply in
                 reply.tags.contains { tag in
@@ -444,7 +459,7 @@ class ReplyViewModel: ObservableObject {
 struct ReplyItem: Identifiable {
     let id: String
     let event: NDKEvent
-    var profile: NDKUserProfile?
+    var metadata: NDKUserMetadata?
     var replyCount: Int = 0
     
     init(event: NDKEvent) {

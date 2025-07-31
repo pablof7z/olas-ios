@@ -1,12 +1,13 @@
 import SwiftUI
 import NDKSwift
+import NDKSwiftUI
 
 struct PostDetailView: View {
     let event: NDKEvent
     @Environment(NostrManager.self) private var nostrManager
     @EnvironmentObject var appState: AppState
     
-    @State private var profile: NDKUserProfile?
+    @State private var metadata: NDKUserMetadata?
     @State private var imageUrls: [String] = []
     @State private var likeCount = 0
     @State private var replyCount = 0
@@ -32,14 +33,14 @@ struct PostDetailView: View {
                         HStack(spacing: OlasDesign.Spacing.sm) {
                             NavigationLink(destination: ProfileView(pubkey: event.pubkey)) {
                                 HStack(spacing: OlasDesign.Spacing.sm) {
-                                    OlasAvatar(
-                                        url: profile?.picture,
-                                        size: 40,
-                                        pubkey: event.pubkey
+                                    NDKUIProfilePicture(
+                                        ndk: nostrManager.ndk,
+                                        pubkey: event.pubkey,
+                                        size: 40
                                     )
                                     
                                     VStack(alignment: .leading, spacing: 2) {
-                                        Text(profile?.displayName ?? profile?.name ?? "...")
+                                        Text(metadata?.displayName ?? metadata?.name ?? "...")
                                             .font(OlasDesign.Typography.bodyMedium)
                                             .foregroundColor(OlasDesign.Colors.text)
                                         
@@ -54,10 +55,16 @@ struct PostDetailView: View {
                         }
                         
                         // Content
-                        OlasRichText(
+                        NDKUIRichTextView(
                             content: event.content,
-                            tags: event.tags
+                            tags: event.tags.map { Tag($0) },
+                            showLinkPreviews: false,
+                            style: .compact
                         )
+                        .environment(\.ndk, nostrManager.ndk)
+                        .font(OlasDesign.Typography.body)
+                        .foregroundColor(OlasDesign.Colors.text)
+                        .tint(Color.white)
                         .padding(.vertical, OlasDesign.Spacing.sm)
                         
                         Divider()
@@ -133,18 +140,20 @@ struct PostDetailView: View {
     }
     
     private func loadProfile() async {
-        guard let profileManager = nostrManager.ndk?.profileManager else { return }
+        guard nostrManager.isInitialized,
+              let profileManager = nostrManager.ndk.profileManager else { return }
         
-        for await profile in await profileManager.observe(for: event.pubkey, maxAge: 3600) {
+        for await metadata in await profileManager.subscribe(for: event.pubkey, maxAge: 3600) {
             await MainActor.run {
-                self.profile = profile
+                self.metadata = metadata
             }
             break
         }
     }
     
     private func loadEngagementCounts() async {
-        guard let ndk = nostrManager.ndk else { return }
+        guard nostrManager.isInitialized else { return }
+        let ndk = nostrManager.ndk
         
         // Load reactions
         let reactionFilter = NDKFilter(
@@ -160,7 +169,7 @@ struct PostDetailView: View {
         
         Task {
             // Count reactions
-            let reactionDataSource = ndk.observe(filter: reactionFilter)
+            let reactionDataSource = ndk.subscribe(filter: reactionFilter)
             let reactions = await reactionDataSource.collect(timeout: 2.0)
             
             var likes = 0
@@ -184,7 +193,7 @@ struct PostDetailView: View {
         
         Task {
             // Count replies
-            let replyDataSource = ndk.observe(filter: replyFilter)
+            let replyDataSource = ndk.subscribe(filter: replyFilter)
             let replies = await replyDataSource.collect(timeout: 2.0)
             
             await MainActor.run {
@@ -194,8 +203,9 @@ struct PostDetailView: View {
     }
     
     private func toggleLike() {
-        guard let ndk = nostrManager.ndk,
-              let signer = NDKAuthManager.shared.activeSigner else { return }
+        guard nostrManager.isInitialized,
+              let signer = nostrManager.authManager?.activeSigner else { return }
+        let ndk = nostrManager.ndk
         
         hasLiked.toggle()
         likeCount += hasLiked ? 1 : -1

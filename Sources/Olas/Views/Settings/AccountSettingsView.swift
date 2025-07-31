@@ -10,6 +10,7 @@ struct AccountSettingsView: View {
     @State private var showBiometricToggle = false
     @State private var biometricEnabled = false
     @State private var showNsecWarning = false
+    @State private var showProfileEditAlert = false
     
     var body: some View {
         ZStack {
@@ -52,6 +53,11 @@ struct AccountSettingsView: View {
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("Your private key (nsec) controls your account. Anyone with this key has full access. Keep it secure and never share it.")
+        }
+        .alert("Coming Soon", isPresented: $showProfileEditAlert) {
+            Button("OK") { }
+        } message: {
+            Text("Profile editing will be available in a future update.")
         }
     }
     
@@ -100,7 +106,7 @@ struct AccountSettingsView: View {
             OlasButton(
                 title: "Edit Profile",
                 action: {
-                    // TODO: Navigate to profile edit
+                    showProfileEditAlert = true
                     OlasDesign.Haptic.selection()
                 },
                 style: .secondary

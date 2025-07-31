@@ -15,6 +15,25 @@ struct OlasStoriesView: View {
     @State private var selectedStoryWrapper: StoryIndexWrapper?
     @State private var showCreateStory = false
     
+    private var allStoriesFlat: [Story] {
+        storiesManager.userStories.flatMap { $0.stories }
+    }
+    
+    private func getUserStory(for story: Story) -> UserStory {
+        let collection = storiesManager.userStories.first { $0.authorPubkey == story.authorPubkey }
+        return UserStory(
+            user: StoryUser(
+                pubkey: story.authorPubkey,
+                displayName: collection?.authorMetadata?.name ?? "User",
+                avatarURL: collection?.authorMetadata?.picture
+            ),
+            imageURL: story.mediaURLs.first,
+            text: story.content,
+            timestamp: story.timestamp,
+            isViewed: storiesManager.isStoryViewed(story.id)
+        )
+    }
+    
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: OlasDesign.Spacing.sm) {
@@ -22,31 +41,12 @@ struct OlasStoriesView: View {
                 AddStoryButton(showCreateStory: $showCreateStory)
                 
                 // User stories
-                ForEach(storiesManager.userStories.flatMap { $0.stories }.indices, id: \.self) { index in
-                    let allStories = storiesManager.userStories.flatMap { $0.stories }
-                    if index < allStories.count {
-                        let story = allStories[index]
-                        // Convert Story to UserStory for compatibility
-                        let userStory = UserStory(
-                            user: StoryUser(
-                                pubkey: story.authorPubkey,
-                                displayName: storiesManager.userStories.first { $0.authorPubkey == story.authorPubkey }?.authorProfile?.name ?? "User",
-                                avatarURL: storiesManager.userStories.first { $0.authorPubkey == story.authorPubkey }?.authorProfile?.picture
-                            ),
-                            imageURL: story.mediaURLs.first,
-                            text: story.content,
-                            timestamp: story.timestamp,
-                            isViewed: storiesManager.isStoryViewed(story.id)
-                        )
-                        StoryCircle(
-                            story: userStory,
-                            index: index,
-                            selectedStoryIndex: Binding(
-                                get: { selectedStoryWrapper?.id == index ? index : nil },
-                            set: { _ in selectedStoryWrapper = StoryIndexWrapper(index) }
-                        )
+                ForEach(Array(allStoriesFlat.enumerated()), id: \.offset) { index, story in
+                    StoryCircleWrapper(
+                        story: getUserStory(for: story),
+                        index: index,
+                        selectedStoryWrapper: $selectedStoryWrapper
                     )
-                    }
                 }
             }
             .padding(.horizontal, OlasDesign.Spacing.md)
@@ -58,8 +58,8 @@ struct OlasStoriesView: View {
                     UserStory(
                         user: StoryUser(
                             pubkey: story.authorPubkey,
-                            displayName: collection.authorProfile?.name ?? "User",
-                            avatarURL: collection.authorProfile?.picture
+                            displayName: collection.authorMetadata?.name ?? "User",
+                            avatarURL: collection.authorMetadata?.picture
                         ),
                         imageURL: story.mediaURLs.first,
                         text: story.content,
@@ -131,6 +131,28 @@ struct AddStoryButton: View {
                 isPressed = pressing
             }
         }, perform: {})
+    }
+}
+
+// MARK: - Story Circle Wrapper
+struct StoryCircleWrapper: View {
+    let story: UserStory
+    let index: Int
+    @Binding var selectedStoryWrapper: StoryIndexWrapper?
+    
+    var body: some View {
+        StoryCircle(
+            story: story,
+            index: index,
+            selectedStoryIndex: Binding(
+                get: { selectedStoryWrapper?.id == index ? index : nil },
+                set: { newValue in
+                    if newValue != nil {
+                        selectedStoryWrapper = StoryIndexWrapper(index)
+                    }
+                }
+            )
+        )
     }
 }
 

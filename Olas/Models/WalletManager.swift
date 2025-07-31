@@ -12,19 +12,23 @@ class OlasWalletManager: ObservableObject {
     @Published var isLoading = false
     @Published var error: Error?
     
-    /// Get current balance directly from the wallet
-    var currentBalance: Int64 {
+    // Direct access to wallet data (cached)
+    @Published var currentBalance: Int64 = 0
+    @Published var recentTransactions: [WalletTransaction] = []
+    
+    private var eventObservationTask: Task<Void, Never>?
+    
+    /// Get current balance (compatibility)
+    var currentBalanceAsync: Int64 {
         get async {
-            guard let wallet = wallet else { return 0 }
-            return (try? await wallet.getBalance()) ?? 0
+            return currentBalance
         }
     }
     
-    /// Get transactions directly from the wallet's transaction history
+    /// Get transactions (compatibility)  
     var transactions: [WalletTransaction] {
         get async {
-            guard let wallet = wallet else { return [] }
-            return await wallet.getRecentTransactions(limit: 50)
+            return recentTransactions
         }
     }
     
@@ -51,23 +55,19 @@ class OlasWalletManager: ObservableObject {
     
     /// Load wallet for currently authenticated user
     func loadWalletForCurrentUser() async throws {
-        print("💰 OlasWalletManager.loadWalletForCurrentUser() called")
-        guard NDKAuthManager.shared.isAuthenticated else {
-            print("💰 Not authenticated, throwing error")
+        NDKLogger.log(.debug, category: .wallet, "💰 OlasWalletManager.loadWalletForCurrentUser() called")
+        guard let authManager = nostrManager.authManager, authManager.hasActiveSession else {
+            NDKLogger.log(.debug, category: .wallet, "💰 No active session, throwing error")
             throw WalletError.notAuthenticated
         }
         
-        print("💰 Calling loadWallet()")
+        NDKLogger.log(.debug, category: .wallet, "💰 Calling loadWallet()")
         try await loadWallet()
     }
     
     /// Load wallet from NIP-60 events
     func loadWallet() async throws {
         print("💰 OlasWalletManager.loadWallet() called")
-        guard nostrManager.ndk != nil else {
-            print("💰 NDK not initialized, throwing error")
-            throw WalletError.ndkNotInitialized
-        }
         
         isLoading = true
         defer { isLoading = false }
@@ -92,10 +92,12 @@ class OlasWalletManager: ObservableObject {
             return
         }
         
-        guard let ndk = nostrManager.ndk else {
-            print("💰 NDK not initialized")
-            throw WalletError.ndkNotInitialized
+        guard nostrManager.isInitialized else {
+            NDKLogger.log(.debug, category: .wallet, "💰 NDK not initialized")
+            throw WalletError.notAuthenticated
         }
+        let ndk = nostrManager.ndk
+        
         
         // Wait for signer to be available before creating wallet
         guard let signer = ndk.signer else {
@@ -127,6 +129,12 @@ class OlasWalletManager: ObservableObject {
         try await ndkWallet.load()
         print("💰 ndkWallet.load() completed")
         
+        // Start observing wallet events for reactive updates
+        await startWalletEventObservation()
+        
+        // Load initial state
+        await updateWalletState()
+        
         // Check if wallet has mints configured
         let fetchedMintURLs = await ndkWallet.mints.getMintURLs()
         print("💰 Current mint URLs: \(fetchedMintURLs)")
@@ -138,30 +146,23 @@ class OlasWalletManager: ObservableObject {
     }
     
     
-    /// Add a new mint
-    func addMint(_ mintURL: String) async throws {
+    /// Save mint configuration (batch update)
+    func saveMintConfiguration(mintURLs: [String]) async throws {
         guard let wallet = wallet else {
             throw WalletError.noActiveWallet
         }
         
-        guard let url = URL(string: mintURL) else {
-            throw WalletError.invalidMintURL
-        }
+        // Get current relay configuration
+        let relays = await wallet.walletConfigRelays
         
-        await wallet.mints.addMintURL(url: url)
-    }
-    
-    /// Remove a mint
-    func removeMint(_ mintURL: String) async throws {
-        guard let wallet = wallet else {
-            throw WalletError.noActiveWallet
-        }
+        // Setup wallet with new mint configuration
+        try await wallet.setup(
+            mints: mintURLs,
+            relays: relays,
+            publishMintList: true
+        )
         
-        guard let url = URL(string: mintURL) else {
-            throw WalletError.invalidMintURL
-        }
-        
-        _ = await wallet.mints.removeMint(url: url)
+        print("💰 Saved mint configuration with \(mintURLs.count) mints")
     }
     
     /// Pay a Lightning invoice
@@ -176,6 +177,7 @@ class OlasWalletManager: ObservableObject {
         )
         
         print("💰 Paid Lightning invoice: \(amount) sats, fee: \(feePaid ?? 0) sats")
+        
         return preimage
     }
     
@@ -241,6 +243,7 @@ class OlasWalletManager: ObservableObject {
         let tokenString = "cashuA\(base64Token)"
         
         print("💰 Sent \(amount) sats")
+        
         return tokenString
     }
     
@@ -291,7 +294,22 @@ class OlasWalletManager: ObservableObject {
         return mintQuote.request
     }
     
-    /// Generate a Lightning invoice to receive payment
+    /// Generate a Lightning invoice to receive payment and return the mint quote for monitoring
+    func requestMint(amount: Int64, mintURL: String) async throws -> CashuMintQuote {
+        guard let wallet = wallet else {
+            throw WalletError.noActiveWallet
+        }
+        
+        // Request mint quote
+        let mintQuote = try await wallet.requestMint(
+            amount: amount,
+            mintURL: mintURL
+        )
+        
+        return mintQuote
+    }
+    
+    /// Generate a Lightning invoice to receive payment (legacy method for compatibility)
     func generateInvoice(amount: Int64, description: String?) async throws -> String {
         guard let wallet = wallet else {
             throw WalletError.noActiveWallet
@@ -299,19 +317,18 @@ class OlasWalletManager: ObservableObject {
         
         // Get first available mint
         let mintURLs = await wallet.mints.getMintURLs()
-        guard let firstMintString = mintURLs.first,
-              let mintURL = URL(string: firstMintString) else {
+        guard let firstMintString = mintURLs.first else {
             throw WalletError.noActiveWallet
         }
         
         // Request mint quote to get Lightning invoice
-        let mintQuote = try await wallet.mints.requestMintQuote(
+        let mintQuote = try await requestMint(
             amount: amount,
-            mintURL: mintURL.absoluteString
+            mintURL: firstMintString
         )
         
         // Return the Lightning invoice
-        return mintQuote.request
+        return mintQuote.invoice
     }
     
     /// Receive ecash tokens
@@ -359,10 +376,11 @@ class OlasWalletManager: ObservableObject {
         }
         
         print("💰 Successfully received \(totalReceived) sats")
+        
         return totalReceived
     }
     
-    /// Get active mint URLs
+    /// Get active mint URLs (compatibility - now gets directly from wallet)
     func getActiveMintURLs() async -> [String] {
         guard let wallet = wallet else { return [] }
         return await wallet.mints.getMintURLs()
@@ -390,12 +408,81 @@ class OlasWalletManager: ObservableObject {
         return balances
     }
     
+    // MARK: - Wallet Event Observation
+    
+    /// Start observing wallet events for reactive updates
+    private func startWalletEventObservation() async {
+        guard let wallet = wallet else { return }
+        
+        // Cancel any existing observation
+        eventObservationTask?.cancel()
+        
+        // Start new observation task
+        eventObservationTask = Task { [weak self] in
+            guard let self = self else { return }
+            
+            for await event in await wallet.events {
+                await self.handleWalletEvent(event)
+            }
+        }
+        
+        print("💰 Started wallet event observation")
+    }
+    
+    /// Handle wallet events and update published properties
+    private func handleWalletEvent(_ event: NIP60WalletEvent) async {
+        print("💰 Received wallet event: \(event.type)")
+        
+        switch event.type {
+        case .balanceChanged(let newBalance):
+            currentBalance = newBalance
+            
+        case .transactionAdded(let transaction):
+            recentTransactions.append(transaction)
+            // Keep only recent transactions
+            if recentTransactions.count > 50 {
+                recentTransactions = Array(recentTransactions.suffix(50))
+            }
+            
+        case .transactionUpdated(let transaction):
+            if let index = recentTransactions.firstIndex(where: { $0.id == transaction.id }) {
+                recentTransactions[index] = transaction
+            }
+            
+        case .nutzapReceived(let amount, let from, _):
+            // Could show notification or update UI
+            print("💰 Received nutzap: \(amount) sats from \(from ?? "unknown")")
+            
+        case .configurationUpdated, .mintsAdded, .mintsRemoved:
+            // Configuration changes are handled by individual views during editing
+            // No need to maintain global state for these
+            print("💰 Configuration event received (handled by editing views)")
+        }
+    }
+    
+    /// Update wallet state from current wallet data
+    private func updateWalletState() async {
+        guard let wallet = wallet else { return }
+        
+        // Load initial state (only reactive data, not configuration)
+        currentBalance = (try? await wallet.getBalance()) ?? 0
+        recentTransactions = await wallet.getRecentTransactions(limit: 50)
+        
+        print("💰 Updated initial wallet state: \(currentBalance) sats, \(recentTransactions.count) transactions")
+    }
+    
     // MARK: - Session Management
     
     /// Clear all wallet data (called during logout)
     func clearWalletData() {
+        // Cancel event observation
+        eventObservationTask?.cancel()
+        eventObservationTask = nil
+        
         // Clear wallet state
         wallet = nil
+        currentBalance = 0
+        recentTransactions = []
         
         print("💰 OlasWalletManager - Cleared all wallet data")
     }

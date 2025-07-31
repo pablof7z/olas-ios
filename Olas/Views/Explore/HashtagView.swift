@@ -8,7 +8,7 @@ struct HashtagView: View {
     @Environment(\.dismiss) var dismiss
     
     @State private var posts: [NDKEvent] = []
-    @State private var profiles: [String: NDKUserProfile] = [:]
+    @State private var metadataCache: [String: NDKUserMetadata] = [:]
     @State private var isLoading = true
     @State private var isFollowing = false
     @State private var stats = HashtagStats()
@@ -157,7 +157,7 @@ struct HashtagView: View {
             ForEach(posts, id: \.id) { post in
                 HashtagGridItem(
                     post: post,
-                    profile: profiles[post.pubkey]
+                    metadata: metadataCache[post.pubkey]
                 )
                 .onAppear {
                     loadProfileIfNeeded(for: post.pubkey)
@@ -187,7 +187,8 @@ struct HashtagView: View {
     }
     
     private func loadHashtagPosts() async {
-        guard let ndk = nostrManager.ndk else { return }
+        guard nostrManager.isInitialized else { return }
+        let ndk = nostrManager.ndk
         
         // Create filter for posts containing this hashtag
         let filter = NDKFilter(
@@ -196,7 +197,7 @@ struct HashtagView: View {
         )
         
         Task {
-            let dataSource = ndk.observe(filter: filter)
+            let dataSource = ndk.subscribe(filter: filter)
             let events = await dataSource.collect(timeout: 5.0)
             
             // Filter posts with hashtag and images
@@ -231,14 +232,14 @@ struct HashtagView: View {
     }
     
     private func loadProfileIfNeeded(for pubkey: String) {
-        guard profiles[pubkey] == nil,
-              let ndk = nostrManager.ndk,
-              let profileManager = ndk.profileManager else { return }
+        guard metadataCache[pubkey] == nil,
+              nostrManager.isInitialized,
+              let profileManager = nostrManager.ndk.profileManager else { return }
         
         Task {
-            for await profile in await profileManager.observe(for: pubkey, maxAge: 3600) {
+            for await metadata in await profileManager.subscribe(for: pubkey, maxAge: 3600) {
                 await MainActor.run {
-                    profiles[pubkey] = profile
+                    metadataCache[pubkey] = metadata
                 }
                 break
             }
@@ -259,7 +260,7 @@ struct HashtagView: View {
 
 struct HashtagGridItem: View {
     let post: NDKEvent
-    let profile: NDKUserProfile?
+    let metadata: NDKUserMetadata?
     
     @State private var imageUrls: [String] = []
     

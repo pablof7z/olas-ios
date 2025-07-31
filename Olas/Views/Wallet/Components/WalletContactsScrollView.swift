@@ -1,9 +1,10 @@
 import SwiftUI
 import NDKSwift
+import NDKSwiftUI
 
 struct WalletContactsScrollView: View {
     @Environment(NostrManager.self) private var nostrManager
-    @State private var contacts: [(pubkey: String, profile: NDKUserProfile?)] = []
+    @State private var contacts: [(pubkey: String, metadata: NDKUserMetadata?)] = []
     @State private var isLoading = true
     @Binding var showNutZap: Bool
     @Binding var nutZapRecipient: String?
@@ -98,7 +99,7 @@ struct WalletContactsScrollView: View {
                         ForEach(contacts, id: \.pubkey) { contact in
                             ContactItemView(
                                 pubkey: contact.pubkey,
-                                profile: contact.profile
+                                metadata: contact.metadata
                             ) {
                                 nutZapRecipient = contact.pubkey
                                 showNutZap = true
@@ -116,17 +117,18 @@ struct WalletContactsScrollView: View {
     }
     
     private func loadContacts() async {
-        guard let ndk = nostrManager.ndk,
-              let userPubkey = try? await ndk.signer?.pubkey else { return }
+        guard nostrManager.isInitialized,
+              let userPubkey = try? await nostrManager.ndk.signer?.pubkey else { return }
+        
+        let ndk = nostrManager.ndk
         
         // Load contact list (kind 3)
         let filter = NDKFilter(
             authors: [userPubkey],
-            kinds: [EventKind.contacts],
-            limit: 1
+            kinds: [EventKind.contacts]
         )
         
-        let dataSource = ndk.observe(
+        let dataSource = ndk.subscribe(
             filter: filter,
             maxAge: 3600,
             cachePolicy: .cacheWithNetwork
@@ -139,16 +141,16 @@ struct WalletContactsScrollView: View {
             let pubkeys = Array(pubkeyList.prefix(10)) // Limit to 10 for horizontal scroll
             
             // Load profiles
-            var loadedContacts: [(pubkey: String, profile: NDKUserProfile?)] = []
+            var loadedContacts: [(pubkey: String, metadata: NDKUserMetadata?)] = []
             
             for pubkey in pubkeys {
                 if let profileManager = ndk.profileManager {
-                    var profile: NDKUserProfile?
-                    for await p in await profileManager.observe(for: pubkey, maxAge: 3600) {
-                        profile = p
+                    var metadata: NDKUserMetadata?
+                    for await m in await profileManager.subscribe(for: pubkey, maxAge: 3600) {
+                        metadata = m
                         break
                     }
-                    loadedContacts.append((pubkey: pubkey, profile: profile))
+                    loadedContacts.append((pubkey: pubkey, metadata: metadata))
                 }
             }
             
@@ -164,18 +166,19 @@ struct WalletContactsScrollView: View {
 
 struct ContactItemView: View {
     let pubkey: String
-    let profile: NDKUserProfile?
+    let metadata: NDKUserMetadata?
     let action: () -> Void
     
     @State private var isPressed = false
+    @Environment(NostrManager.self) private var nostrManager
     
     var body: some View {
         Button(action: action) {
             VStack(spacing: OlasDesign.Spacing.sm) {
-                OlasAvatar(
-                    url: profile?.picture,
-                    size: 60,
-                    pubkey: pubkey
+                NDKUIProfilePicture(
+                    ndk: nostrManager.ndk,
+                    pubkey: pubkey,
+                    size: 60
                 )
                 .overlay(
                     Circle()
@@ -201,7 +204,7 @@ struct ContactItemView: View {
     }
     
     private var displayName: String {
-        if let name = profile?.displayName ?? profile?.name {
+        if let name = metadata?.displayName ?? metadata?.name {
             return name
         }
         return String(pubkey.prefix(8))

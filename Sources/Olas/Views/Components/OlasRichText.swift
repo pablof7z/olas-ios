@@ -10,7 +10,7 @@ struct OlasRichText: View {
     @EnvironmentObject var appState: AppState
     
     @State private var parsedComponents: [RichTextComponent] = []
-    @State private var profileCache: [String: NDKUserProfile] = [:]
+    @State private var metadataCache: [String: NDKUserMetadata] = []
     @State private var loadingProfiles: Set<String> = []
     
     var body: some View {
@@ -39,7 +39,7 @@ struct OlasRichText: View {
                 result.append(AttributedString(text))
                 
             case .mention(let pubkey):
-                let displayName = profileCache[pubkey]?.displayName ?? profileCache[pubkey]?.name ?? shortPubkey(pubkey)
+                let displayName = metadataCache[pubkey]?.displayName ?? metadataCache[pubkey]?.name ?? shortPubkey(pubkey)
                 var mention = AttributedString("@\(displayName)")
                 mention.foregroundColor = .white
                 mention.font = OlasDesign.Typography.bodyMedium
@@ -211,12 +211,13 @@ struct OlasRichText: View {
     }
     
     private func loadProfiles() async {
-        guard let profileManager = nostrManager.ndk?.profileManager else { return }
+        guard nostrManager.isInitialized,
+              let profileManager = nostrManager.ndk.profileManager else { return }
         
         // Find all unique pubkeys that need loading
         let pubkeysToLoad = parsedComponents.compactMap { component -> String? in
             if case .mention(let pubkey) = component,
-               profileCache[pubkey] == nil,
+               metadataCache[pubkey] == nil,
                !loadingProfiles.contains(pubkey) {
                 return pubkey
             }
@@ -229,24 +230,24 @@ struct OlasRichText: View {
         }
         
         // Load profiles
-        await withTaskGroup(of: (String, NDKUserProfile?).self) { group in
+        await withTaskGroup(of: (String, NDKUserMetadata?).self) { group in
             for pubkey in pubkeysToLoad {
                 group.addTask {
                     // Use observe to get reactive updates
-                    var profile: NDKUserProfile?
-                    for await p in await profileManager.observe(for: pubkey, maxAge: 3600) {
-                        profile = p
+                    var metadata: NDKUserMetadata?
+                    for await m in await profileManager.observe(for: pubkey, maxAge: 3600) {
+                        metadata = m
                         break // Just get the first one for now
                     }
-                    return (pubkey, profile)
+                    return (pubkey, metadata)
                 }
             }
             
             // Collect results
-            for await (pubkey, profile) in group {
+            for await (pubkey, metadata) in group {
                 await MainActor.run {
-                    if let profile = profile {
-                        profileCache[pubkey] = profile
+                    if let metadata = metadata {
+                        metadataCache[pubkey] = metadata
                     }
                     loadingProfiles.remove(pubkey)
                 }

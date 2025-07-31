@@ -1,8 +1,18 @@
 import SwiftUI
 import NDKSwift
 
+struct MintInfo: Identifiable, Equatable {
+    let id = UUID()
+    let url: URL
+    let name: String
+    
+    static func == (lhs: MintInfo, rhs: MintInfo) -> Bool {
+        lhs.url == rhs.url
+    }
+}
+
 struct MintManagementView: View {
-    @ObservedObject var walletManager: OlasWalletManager
+    @Environment(NostrManager.self) private var nostrManager
     @Environment(\.dismiss) private var dismiss
     @State private var selectedMint: String?
     @State private var showingAddMint = false
@@ -10,9 +20,12 @@ struct MintManagementView: View {
     @State private var mintStats: [String: MintStats] = [:]
     @State private var animateCards = false
     
-    @State private var mintURLs: [String] = []
-    @State private var mintBalances: [String: Int64] = [:]
+    @State private var editableMints: [MintInfo] = []
+    @State private var originalMintURLs: [String] = []
     @State private var transactionCount: Int = 0
+    @State private var isSaving = false
+    @State private var hasUnsavedChanges = false
+    
     @State private var currentBalance: Int64 = 0
     
     struct MintStats {
@@ -47,7 +60,7 @@ struct MintManagementView: View {
                             .padding(.top, OlasDesign.Spacing.md)
                         
                         // Mint Cards
-                        if mintURLs.isEmpty {
+                        if editableMints.isEmpty {
                             emptyStateView
                         } else {
                             mintCardsSection
@@ -65,45 +78,48 @@ struct MintManagementView: View {
             .navigationBarTitleDisplayMode(.large)
             #endif
             .toolbar {
-                ToolbarItem(placement: {
-                    #if os(iOS)
-                    .navigationBarTrailing
-                    #else
-                    .automatic
-                    #endif
-                }()) {
-                    Button("Done") {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        if hasUnsavedChanges {
+                            // Could show confirmation dialog
+                        }
                         dismiss()
                     }
                     .foregroundStyle(OlasDesign.Colors.text)
                 }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Save") {
+                        Task { await saveChanges() }
+                    }
+                    .fontWeight(.bold)
+                    .foregroundStyle(hasUnsavedChanges ? OlasDesign.Colors.primary : OlasDesign.Colors.textSecondary)
+                    .disabled(!hasUnsavedChanges || isSaving)
+                }
             }
             .sheet(isPresented: $showingAddMint) {
-                AddMintView(walletManager: walletManager)
+                AddMintView { url in
+                    await addMintToLocal(url: url)
+                }
             }
             .sheet(isPresented: $showingMintDetails) {
                 if let mint = selectedMint {
-                    MintDetailView(mintURL: mint, walletManager: walletManager)
+                    MintDetailView(mintURL: mint, nostrManager: nostrManager)
                 }
             }
             .onAppear {
-        Task {
-            let urls = await walletManager.getActiveMintURLs()
-            let balances = await walletManager.getAllMintBalances()
-            let transactions = await walletManager.transactions
-            let balance = await walletManager.currentBalance
-            
-            DispatchQueue.main.async {
-                self.mintURLs = urls
-                self.mintBalances = balances
-                self.transactionCount = transactions.count
-                self.currentBalance = balance
-            }
-            
-            loadMintStats()
-        }
+                Task {
+                    await loadData()
+                    loadMintStats()
+                }
                 withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
                     animateCards = true
+                }
+            }
+            .onChange(of: nostrManager.cashuWallet != nil) { _, _ in
+                Task {
+                    await loadData()
+                    loadMintStats()
                 }
             }
         }
@@ -142,13 +158,13 @@ struct MintManagementView: View {
             HStack(spacing: OlasDesign.Spacing.xl) {
                 MintStatCard(
                     icon: "building.2.fill",
-                    value: "\(mintURLs.count)",
+                    value: "\(editableMints.count)",
                     label: "Active Mints"
                 )
                 
                 MintStatCard(
                     icon: "bitcoinsign.circle.fill",
-                    value: "\(formatSats(mintBalances.values.reduce(0, +)))",
+                    value: "\(formatSats(currentBalance))",
                     label: "Total Balance"
                 )
                 
@@ -191,20 +207,17 @@ struct MintManagementView: View {
     
     private var mintCardsSection: some View {
         VStack(spacing: OlasDesign.Spacing.md) {
-            ForEach(Array(mintURLs.enumerated()), id: \.element) { index, mintURL in
+            ForEach(Array(editableMints.enumerated()), id: \.element.id) { index, mint in
                 MintCard(
-                    mintURL: mintURL,
-                    balance: mintBalances[mintURL] ?? 0,
-                    stats: mintStats[mintURL],
+                    mintInfo: mint,
+                    stats: mintStats[mint.url.absoluteString],
                     onTap: {
-                        selectedMint = mintURL
+                        selectedMint = mint.url.absoluteString
                         showingMintDetails = true
                         OlasDesign.Haptic.selection()
                     },
                     onRemove: {
-                        Task {
-                            await removeMint(mintURL)
-                        }
+                        removeMint(mint)
                     }
                 )
                 .scaleEffect(animateCards ? 1 : 0.8)
@@ -310,30 +323,108 @@ struct MintManagementView: View {
     
     // MARK: - Helper Methods
     
+    private func loadData() async {
+        guard let wallet = nostrManager.cashuWallet else {
+            await MainActor.run {
+                self.originalMintURLs = []
+                self.editableMints = []
+                self.transactionCount = 0
+                self.currentBalance = 0
+                self.hasUnsavedChanges = false
+            }
+            return
+        }
+        
+        // Load current mint configuration from wallet
+        let mintURLs = await wallet.mints.getMintURLs()
+        let transactions = await wallet.getRecentTransactions(limit: 1000) // Get more for counting
+        let balance = (try? await wallet.getBalance()) ?? 0
+        
+        await MainActor.run {
+            self.originalMintURLs = mintURLs
+            self.editableMints = mintURLs.compactMap { urlString in
+                guard let url = URL(string: urlString) else { return nil }
+                return MintInfo(url: url, name: url.host ?? "Unknown Mint")
+            }
+            self.transactionCount = transactions.count
+            self.currentBalance = balance
+            self.hasUnsavedChanges = false
+        }
+    }
+    
     private func loadMintStats() {
-        // Mock data - in production, fetch real stats
-        for mint in mintURLs {
-            mintStats[mint] = MintStats(
-                balance: mintBalances[mint] ?? 0,
-                tokenCount: 0, // Mock data, adjust with real values if available
-                status: .active,
-                lastActive: Date(),
-                fee: 0.5
-            )
+        Task {
+            guard let wallet = nostrManager.cashuWallet else { return }
+            
+            // Load mint balances
+            let mintURLs = await wallet.mints.getMintURLs()
+            var balances: [String: Int64] = [:]
+            for mintString in mintURLs {
+                if let mintURL = URL(string: mintString) {
+                    let balance = await wallet.getBalance(mint: mintURL)
+                    balances[mintString] = balance
+                }
+            }
+            
+            await MainActor.run {
+                // Mock data - in production, fetch real stats  
+                for mint in editableMints {
+                    let urlString = mint.url.absoluteString
+                    mintStats[urlString] = MintStats(
+                        balance: balances[urlString] ?? 0,
+                        tokenCount: 0,
+                        status: .active,
+                        lastActive: Date(),
+                        fee: 0.5
+                    )
+                }
+            }
+        }
+    }
+    
+    private func addMintToLocal(url: URL) async {
+        let mintInfo = MintInfo(url: url, name: url.host ?? "Unknown Mint")
+        
+        // Check if already exists
+        guard !editableMints.contains(where: { $0.url == url }) else {
+            return
+        }
+        
+        editableMints.append(mintInfo)
+        hasUnsavedChanges = true
+        loadMintStats()
+    }
+    
+    private func removeMint(_ mint: MintInfo) {
+        editableMints.removeAll { $0.id == mint.id }
+        hasUnsavedChanges = true
+        loadMintStats()
+    }
+    
+    private func saveChanges() async {
+        isSaving = true
+        
+        do {
+            let mintURLs = editableMints.map { $0.url.absoluteString }
+            try await nostrManager.saveMintConfiguration(mintURLs: mintURLs)
+            
+            await MainActor.run {
+                self.originalMintURLs = mintURLs
+                self.hasUnsavedChanges = false
+                self.isSaving = false
+            }
+            
+            dismiss()
+        } catch {
+            await MainActor.run {
+                self.isSaving = false
+                // Could show error alert
+            }
         }
     }
     
     private func calculateTransactionCount() -> Int {
         transactionCount
-    }
-    
-    private func removeMint(_ mintURL: String) async {
-        do {
-            try await walletManager.removeMint(mintURL)
-            OlasDesign.Haptic.success()
-        } catch {
-            OlasDesign.Haptic.error()
-        }
     }
     
     private func formatSats(_ sats: Int64) -> String {
@@ -371,8 +462,7 @@ struct MintStatCard: View {
 }
 
 struct MintCard: View {
-    let mintURL: String
-    let balance: Int64
+    let mintInfo: MintInfo
     let stats: MintManagementView.MintStats?
     let onTap: () -> Void
     let onRemove: () -> Void
@@ -414,12 +504,12 @@ struct MintCard: View {
                     
                     // Mint info
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(extractMintName(from: mintURL))
+                        Text(mintInfo.name)
                             .font(OlasDesign.Typography.bodyBold)
                             .foregroundStyle(OlasDesign.Colors.text)
                         
                         HStack(spacing: 4) {
-                            Text(mintURL.replacingOccurrences(of: "https://", with: ""))
+                            Text(mintInfo.url.absoluteString.replacingOccurrences(of: "https://", with: ""))
                                 .font(OlasDesign.Typography.caption)
                                 .foregroundStyle(OlasDesign.Colors.textSecondary)
                                 .lineLimit(1)
@@ -438,7 +528,7 @@ struct MintCard: View {
                     
                     // Balance
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text(formatSats(balance))
+                        Text(formatSats(stats?.balance ?? 0))
                             .font(OlasDesign.Typography.bodyBold)
                             .foregroundStyle(OlasDesign.Colors.text)
                         Text("sats")
@@ -520,7 +610,7 @@ struct MintCard: View {
                 onRemove()
             }
         } message: {
-            Text("This mint has \(balance) sats. You cannot remove it until the balance is zero.")
+            Text("This mint has \(stats?.balance ?? 0) sats. You cannot remove it until the balance is zero.")
         }
         .onLongPressGesture(minimumDuration: .infinity, maximumDistance: .infinity, pressing: { pressing in
             withAnimation(.easeInOut(duration: 0.1)) {
@@ -624,7 +714,7 @@ struct MintStatItem: View {
 
 struct MintDetailView: View {
     let mintURL: String
-    @ObservedObject var walletManager: OlasWalletManager
+    let nostrManager: NostrManager
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {

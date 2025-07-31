@@ -38,7 +38,7 @@ struct SettingsView: View {
                                 
                                 Spacer()
                                 
-                                Text("\(nostrManager.ndk?.relayPool.relays.count ?? 0)")
+                                Text("\(nostrManager.isInitialized ? nostrManager.ndk.relayPool.relays.count : 0)")
                                     .font(OlasDesign.Typography.caption)
                                     .foregroundColor(OlasDesign.Colors.textSecondary)
                             }

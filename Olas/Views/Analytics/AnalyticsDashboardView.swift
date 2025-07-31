@@ -68,14 +68,14 @@ struct AnalyticsDashboardView: View {
                 }
             }
             .task {
-                if let ndk = nostrManager.ndk {
-                    await analyticsManager.loadAnalytics(ndk: ndk, timeRange: selectedTimeRange)
+                if nostrManager.isInitialized {
+                    await analyticsManager.loadAnalytics(ndk: nostrManager.ndk, timeRange: selectedTimeRange)
                 }
             }
             .onChange(of: selectedTimeRange) { _, newValue in
                 Task {
-                    if let ndk = nostrManager.ndk {
-                        await analyticsManager.loadAnalytics(ndk: ndk, timeRange: newValue)
+                    if nostrManager.isInitialized {
+                        await analyticsManager.loadAnalytics(ndk: nostrManager.ndk, timeRange: newValue)
                     }
                 }
             }

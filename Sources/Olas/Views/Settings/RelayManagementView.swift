@@ -341,7 +341,7 @@ struct RelayManagementView: View {
     // MARK: - Methods
     
     private func loadRelays() {
-        guard let ndk = nostrManager.ndk else { return }
+        let ndk = nostrManager.ndk
         
         relays = ndk.relayPool.relays.map { relay in
             RelayInfo(
@@ -400,7 +400,7 @@ struct RelayManagementView: View {
     }
     
     private func removeRelay(_ relay: RelayInfo) {
-        guard let ndk = nostrManager.ndk else { return }
+        let ndk = nostrManager.ndk
         
         Task {
             // Remove from pool
@@ -416,19 +416,23 @@ struct RelayManagementView: View {
     private func toggleRead(_ relay: RelayInfo) {
         if let index = relays.firstIndex(where: { $0.id == relay.id }) {
             relays[index].isRead.toggle()
-            // TODO: Update relay configuration in NDK
+            Task {
+                await updateRelayConfiguration()
+            }
         }
     }
     
     private func toggleWrite(_ relay: RelayInfo) {
         if let index = relays.firstIndex(where: { $0.id == relay.id }) {
             relays[index].isWrite.toggle()
-            // TODO: Update relay configuration in NDK
+            Task {
+                await updateRelayConfiguration()
+            }
         }
     }
     
     private func reconnectRelay(_ relay: RelayInfo) {
-        guard let ndk = nostrManager.ndk else { return }
+        let ndk = nostrManager.ndk
         
         if let index = relays.firstIndex(where: { $0.id == relay.id }) {
             relays[index].status = .connecting
@@ -443,6 +447,35 @@ struct RelayManagementView: View {
                     loadRelays()
                 }
             }
+        }
+    }
+    
+    private func updateRelayConfiguration() async {
+        let ndk = nostrManager.ndk
+        guard let signer = ndk.signer else { return }
+        
+        // Create relay list event (NIP-65)
+        var tags: [[String]] = []
+        
+        for relay in relays {
+            if relay.isRead && relay.isWrite {
+                tags.append(["r", relay.url])
+            } else if relay.isRead {
+                tags.append(["r", relay.url, "read"])
+            } else if relay.isWrite {
+                tags.append(["r", relay.url, "write"])
+            }
+        }
+        
+        do {
+            let event = try await NDKEventBuilder(ndk: ndk)
+                .kind(10002)
+                .tags(tags)
+                .build(signer: signer)
+            
+            _ = try await ndk.publish(event)
+        } catch {
+            print("Failed to update relay configuration: \(error)")
         }
     }
     

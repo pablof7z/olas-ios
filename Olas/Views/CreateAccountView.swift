@@ -122,7 +122,7 @@ struct CreateAccountView: View {
         Task {
             do {
                 isCreatingAccount = true
-                _ = try await nostrManager.createNewAccount(displayName: displayName)
+                _ = try await nostrManager.olasCreateNewAccount(displayName: displayName)
                 dismiss()
             } catch {
                 print("Account creation failed: \(error)")

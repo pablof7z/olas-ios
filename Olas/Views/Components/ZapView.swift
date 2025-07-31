@@ -21,7 +21,7 @@ struct ZapView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showingSuccess = false
-    @State private var recipientProfile: NDKUserProfile?
+    @State private var recipientMetadata: NDKUserMetadata?
     
     let presetAmounts = [100, 500, 1000, 5000, 10000, 50000]
     
@@ -100,15 +100,15 @@ struct ZapView: View {
                 .padding(.horizontal, OlasDesign.Spacing.md)
                 
                 // Recipient info
-                if let profile = recipientProfile {
+                if let metadata = recipientMetadata {
                     VStack(spacing: OlasDesign.Spacing.xs) {
-                        if profile.lud16 != nil || profile.lud06 != nil {
+                        if metadata.lud16 != nil || metadata.lud06 != nil {
                             Label("Lightning enabled", systemImage: "checkmark.circle.fill")
                                 .font(OlasDesign.Typography.caption)
                                 .foregroundStyle(OlasDesign.Colors.success)
                         }
                         
-                        if let lud16 = profile.lud16 {
+                        if let lud16 = metadata.lud16 {
                             Text(lud16)
                                 .font(OlasDesign.Typography.caption)
                                 .foregroundStyle(OlasDesign.Colors.textSecondary)
@@ -192,16 +192,16 @@ struct ZapView: View {
     }
     
     private func fetchRecipientInfo() async {
-        guard let ndk = nostrManager.ndk,
-              let profileManager = ndk.profileManager else { return }
+        guard nostrManager.isInitialized,
+              let profileManager = nostrManager.ndk.profileManager else { return }
         
         // Observe profile
-        for await profile in await profileManager.observe(for: event.pubkey, maxAge: 3600) {
+        for await metadata in await profileManager.subscribe(for: event.pubkey, maxAge: 3600) {
             await MainActor.run {
-                recipientProfile = profile
+                recipientMetadata = metadata
                 
-                if let profile = profile {
-                    if profile.lud16 == nil && profile.lud06 == nil {
+                if let metadata = metadata {
+                    if metadata.lud16 == nil && metadata.lud06 == nil {
                         errorMessage = "This user doesn't have Lightning enabled"
                     }
                 } else {
@@ -227,7 +227,7 @@ struct ZapView: View {
     
     private func updateWalletStatus() async {
         let configured = await walletManager.isWalletConfigured
-        let balance = await walletManager.currentBalance
+        let balance = walletManager.currentBalance
         
         await MainActor.run {
             walletConfigured = configured
@@ -256,13 +256,15 @@ struct ZapView: View {
         }
         
         do {
-            guard let ndk = nostrManager.ndk else {
+            guard nostrManager.isInitialized else {
                 await MainActor.run {
                     errorMessage = "NDK not available"
                     isLoading = false
                 }
                 return
             }
+            
+            let ndk = nostrManager.ndk
             
             let zapAmount = Int64(selectedAmount)
             let author = NDKUser(pubkey: event.pubkey)

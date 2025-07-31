@@ -1,11 +1,13 @@
 import SwiftUI
 import NDKSwift
+import NDKSwiftUI
 
 struct FeedView: View {
     @Environment(NostrManager.self) private var nostrManager
     @EnvironmentObject var appState: AppState
     @StateObject private var viewModel = FeedViewModel()
     @Namespace private var animation
+    @State private var showAccountDrawer = false
     
     var body: some View {
         NavigationStack {
@@ -62,7 +64,28 @@ struct FeedView: View {
             #endif
             .toolbar {
                 #if os(iOS)
+                // Current user avatar button - leading
+                ToolbarItem(placement: .navigationBarLeading) {
+                    if let session = nostrManager.authManager?.activeSession {
+                        Button(action: { 
+                            OlasDesign.Haptic.selection()
+                            showAccountDrawer = true 
+                        }) {
+                            NDKUIProfilePicture(
+                                ndk: nostrManager.ndk,
+                                pubkey: session.pubkey,
+                                size: 32
+                            )
+                            .overlay(
+                                Circle()
+                                    .stroke(OlasDesign.Colors.primary, lineWidth: 2)
+                            )
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    }
+                }
                 
+                // Create post button - trailing  
                 ToolbarItem(placement: .navigationBarTrailing) {
                     NavigationLink(destination: CreatePostView()) {
                         Image(systemName: "camera.fill")
@@ -84,12 +107,16 @@ struct FeedView: View {
                 await handleRefresh()
             }
             .onAppear {
-                if let ndk = nostrManager.ndk {
-                    viewModel.startFeed(with: ndk)
-                }
+                let ndk = nostrManager.ndk
+                viewModel.startFeed(with: ndk)
             }
             .onChange(of: viewModel.pendingItemsCount) { _, newValue in
                 // Removed live indicator logic
+            }
+            .sheet(isPresented: $showAccountDrawer) {
+                AccountDrawerView()
+                    .environment(nostrManager)
+                    .environmentObject(appState)
             }
         }
     }
@@ -137,15 +164,15 @@ struct FeedItemView: View {
             HStack(spacing: OlasDesign.Spacing.md) {
                 Button(action: { navigateToProfile = true }) {
                     HStack(spacing: OlasDesign.Spacing.md) {
-                        OlasAvatar(
-                            url: item.profile?.picture,
-                            size: 40,
-                            pubkey: item.event.pubkey
+                        NDKUIProfilePicture(
+                            ndk: nostrManager.ndk,
+                            pubkey: item.event.pubkey,
+                            size: 40
                         )
                         
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 4) {
-                                Text(item.profile?.displayName ?? item.profile?.name ?? String(item.event.pubkey.prefix(8)) + "...")
+                                Text(item.metadata?.displayName ?? item.metadata?.name ?? String(item.event.pubkey.prefix(8)) + "...")
                                     .font(OlasDesign.Typography.bodyMedium)
                                     .foregroundColor(OlasDesign.Colors.text)
                                     .olasTextShadow()
@@ -158,7 +185,7 @@ struct FeedItemView: View {
                                 }
                             }
                             
-                            Text("@\(item.profile?.name ?? String(item.event.pubkey.prefix(8)))")
+                            Text("@\(item.metadata?.name ?? String(item.event.pubkey.prefix(8)))")
                                 .font(OlasDesign.Typography.caption)
                                 .foregroundColor(OlasDesign.Colors.textSecondary)
                         }
@@ -295,10 +322,16 @@ struct FeedItemView: View {
             
             // Content with rich text
             if !item.event.content.isEmpty {
-                OlasRichText(
+                NDKUIRichTextView(
                     content: item.event.content,
-                    tags: item.event.tags
+                    tags: item.event.tags.map { Tag($0) },
+                    showLinkPreviews: false,
+                    style: .compact
                 )
+                .environment(\.ndk, nostrManager.ndk)
+                .font(OlasDesign.Typography.body)
+                .foregroundColor(OlasDesign.Colors.text)
+                .tint(Color.white)
                 .padding(.horizontal, OlasDesign.Spacing.md)
                 .padding(.bottom, OlasDesign.Spacing.md)
             }
@@ -339,8 +372,10 @@ struct FeedItemView: View {
     // MARK: - Engagement Actions
     
     private func toggleLike() {
-        guard let ndk = nostrManager.ndk,
-              let signer = NDKAuthManager.shared.activeSigner else { return }
+        guard nostrManager.isInitialized,
+              let signer = nostrManager.authManager?.activeSigner else { return }
+        
+        let ndk = nostrManager.ndk
         
         #if os(iOS)
         OlasDesign.Haptic.impact(.light)
@@ -407,11 +442,11 @@ struct FeedItemView: View {
     }
     
     private func loadEngagementCounts() async {
-        guard let ndk = nostrManager.ndk else { return }
+        guard nostrManager.isInitialized else { return }
+        let ndk = nostrManager.ndk
         
         // Check if we already liked this - reactive pattern
-        let authManager = NDKAuthManager.shared
-        if let signer = authManager.activeSigner,
+        if let signer = nostrManager.authManager?.activeSigner,
            let myPubkey = try? await signer.pubkey {
             let likeFilter = NDKFilter(
                 authors: [myPubkey],
@@ -420,7 +455,7 @@ struct FeedItemView: View {
             )
             
             // Use reactive observe pattern - check cache first
-            let likeDataSource = ndk.observe(
+            let likeDataSource = ndk.subscribe(
                 filter: likeFilter,
                 maxAge: 3600, // 1 hour cache
                 cachePolicy: .cacheOnly // Only check cache, don't fetch from network
@@ -461,10 +496,10 @@ class FeedViewModel: ObservableObject {
         feedTask = Task {
             
             // Subscribe to kind 20 picture posts (NIP-68)
-            let filter = NDKFilter(kinds: [20], limit: 100)
+            let filter = NDKFilter(kinds: [20])
             
             // Create data source using observe with reactive pattern
-            let dataSource = ndk.observe(
+            let dataSource = ndk.subscribe(
                 filter: filter,
                 maxAge: 0,  // Real-time updates
                 cachePolicy: .cacheWithNetwork
@@ -530,20 +565,20 @@ class FeedViewModel: ObservableObject {
         profileTasks[pubkey] = Task {
             guard let profileManager = ndk.profileManager else { return }
             
-            for await profile in await profileManager.observe(for: pubkey, maxAge: 3600) {
-                if let profile = profile {
+            for await metadata in await profileManager.subscribe(for: pubkey, maxAge: 3600) {
+                if let metadata = metadata {
                     await MainActor.run {
-                        updateItemsWithProfile(pubkey: pubkey, profile: profile)
+                        updateItemsWithMetadata(pubkey: pubkey, metadata: metadata)
                     }
                 }
             }
         }
     }
     
-    private func updateItemsWithProfile(pubkey: String, profile: NDKUserProfile) {
+    private func updateItemsWithMetadata(pubkey: String, metadata: NDKUserMetadata) {
         for index in items.indices {
             if items[index].event.pubkey == pubkey {
-                items[index].profile = profile
+                items[index].metadata = metadata
             }
         }
     }
@@ -601,7 +636,7 @@ class FeedViewModel: ObservableObject {
                 ]
             )
             
-            let reactionsDataSource = ndk.observe(
+            let reactionsDataSource = ndk.subscribe(
                 filter: reactionsFilter,
                 maxAge: 0,
                 cachePolicy: .cacheWithNetwork
@@ -611,12 +646,11 @@ class FeedViewModel: ObservableObject {
             let repliesFilter = NDKFilter(
                 kinds: [EventKind.genericReply],
                 tags: [
-                    "E": Set([eventId]),  // Comments on this as root
-                    "e": Set([eventId])   // Or as parent
+                    "E": Set([eventId])  // Comments on this root event
                 ]
             )
             
-            let repliesDataSource = ndk.observe(
+            let repliesDataSource = ndk.subscribe(
                 filter: repliesFilter,
                 maxAge: 0,
                 cachePolicy: .cacheWithNetwork
@@ -630,7 +664,7 @@ class FeedViewModel: ObservableObject {
                 ]
             )
             
-            let zapsDataSource = ndk.observe(
+            let zapsDataSource = ndk.subscribe(
                 filter: zapsFilter,
                 maxAge: 0,
                 cachePolicy: .cacheWithNetwork
@@ -704,7 +738,7 @@ class FeedViewModel: ObservableObject {
 struct FeedItem: Identifiable {
     let id: String
     let event: NDKEvent
-    var profile: NDKUserProfile?
+    var metadata: NDKUserMetadata?
     let imageURLs: [String]
     let blurhashes: [String]
     var likeCount: Int = 0

@@ -1,5 +1,7 @@
 import SwiftUI
 import NDKSwift
+import NDKSwiftUI
+import NDKSwiftUI
 #if os(iOS)
 import UIKit
 #endif
@@ -74,16 +76,12 @@ struct StoriesView: View {
             VStack(spacing: OlasDesign.Spacing.xs) {
                 ZStack {
                     // User avatar
-                    if let profilePicture = nostrManager.currentUserProfile?.picture {
-                        AsyncImage(url: URL(string: profilePicture)) { image in
-                            image
-                                .resizable()
-                                .scaledToFill()
-                        } placeholder: {
-                            Color.gray.opacity(0.3)
-                        }
-                        .frame(width: 70, height: 70)
-                        .clipShape(Circle())
+                    if let session = nostrManager.authManager?.activeSession {
+                        NDKUIProfilePicture(
+                            ndk: nostrManager.ndk,
+                            pubkey: session.pubkey,
+                            size: 70
+                        )
                     } else {
                         Circle()
                             .fill(
@@ -127,25 +125,19 @@ struct StoriesView: View {
     }
     
     private func getUserInitial() -> String {
-        // Get current user's profile from nostrManager
-        if let currentUser = nostrManager.currentUserProfile {
-            if let name = currentUser.name, !name.isEmpty {
-                return String(name.prefix(1)).uppercased()
-            } else if let displayName = currentUser.displayName, !displayName.isEmpty {
-                return String(displayName.prefix(1)).uppercased()
-            }
-        }
-        
-        // Fallback to first character of pubkey if no profile
-        if let session = nostrManager.authManager.activeSession {
+        // Get current user's session from nostrManager
+        if let session = nostrManager.authManager?.activeSession {
+            // Use first character of pubkey
             return String(session.pubkey.prefix(1)).uppercased()
         }
+        
         
         return "?"
     }
     
     private func loadStories() async {
-        guard let ndk = nostrManager.ndk else { return }
+        guard nostrManager.isInitialized else { return }
+        let ndk = nostrManager.ndk
         
         isLoading = true
         hasLoadedStories = true
@@ -189,15 +181,16 @@ struct StoriesView: View {
     }
     
     private func loadProfiles(for stories: [Story]) async {
-        guard let profileManager = nostrManager.ndk?.profileManager else { return }
+        guard nostrManager.isInitialized,
+              let profileManager = nostrManager.ndk.profileManager else { return }
         
         for story in stories {
             Task {
-                for await profile in await profileManager.observe(for: story.authorPubkey, maxAge: 3600) {
-                    if let profile = profile {
+                for await metadata in await profileManager.subscribe(for: story.authorPubkey, maxAge: 3600) {
+                    if let metadata = metadata {
                         await MainActor.run {
                             if let index = self.stories.firstIndex(where: { $0.id == story.id }) {
-                                self.stories[index].authorProfile = profile
+                                self.stories[index].authorMetadata = metadata
                             }
                         }
                     }
@@ -236,7 +229,7 @@ struct StoryCircleView: View {
                         .frame(width: 74, height: 74)
                     
                     // Avatar
-                    if let picture = story.authorProfile?.picture {
+                    if let picture = story.authorMetadata?.picture {
                         AsyncImage(url: URL(string: picture)) { image in
                             image
                                 .resizable()
@@ -251,7 +244,7 @@ struct StoryCircleView: View {
                             .fill(Color.gray.opacity(0.3))
                             .frame(width: 66, height: 66)
                             .overlay(
-                                Text(String(story.authorProfile?.name?.first ?? "?").uppercased())
+                                Text(String(story.authorMetadata?.name?.first ?? "?").uppercased())
                                     .font(.title3)
                                     .fontWeight(.bold)
                                     .foregroundColor(.white)
@@ -259,7 +252,7 @@ struct StoryCircleView: View {
                     }
                 }
                 
-                Text(story.authorProfile?.name ?? "Loading...")
+                Text(story.authorMetadata?.name ?? "Loading...")
                     .font(OlasDesign.Typography.caption)
                     .foregroundStyle(OlasDesign.Colors.text)
                     .lineLimit(1)
@@ -274,7 +267,7 @@ struct StoryCircleView: View {
 struct Story: Identifiable {
     let id: String
     let authorPubkey: String
-    var authorProfile: NDKUserProfile?
+    var authorMetadata: NDKUserMetadata?
     let content: String
     let mediaURLs: [String]
     let timestamp: Date
@@ -452,6 +445,7 @@ struct StoryViewerView: View {
 
 struct StoryContentView: View {
     let story: Story
+    @Environment(NostrManager.self) private var nostrManager
     
     var body: some View {
         ZStack {
@@ -480,14 +474,14 @@ struct StoryContentView: View {
             VStack {
                 // Author info
                 HStack(spacing: OlasDesign.Spacing.sm) {
-                    OlasAvatar(
-                        url: story.authorProfile?.picture,
-                        size: 40,
-                        pubkey: story.authorPubkey
+                    NDKUIProfilePicture(
+                        ndk: nostrManager.ndk,
+                        pubkey: story.authorPubkey,
+                        size: 40
                     )
                     
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(story.authorProfile?.displayName ?? story.authorProfile?.name ?? "Loading...")
+                        Text(story.authorMetadata?.displayName ?? story.authorMetadata?.name ?? "Loading...")
                             .font(OlasDesign.Typography.bodyBold)
                             .foregroundColor(.white)
                         
@@ -683,19 +677,29 @@ struct CreateStoryView: View {
     private func postStory() async {
         guard let image = selectedImage,
               let ndk = nostrManager.ndk,
-              let signer = NDKAuthManager.shared.activeSigner else { return }
+              let signer = nostrManager.authManager.activeSigner else { return }
         
         isPosting = true
         
         do {
             // Upload image to Blossom
             let imageData = image.jpegData(compressionQuality: 0.8) ?? Data()
-            let uploadedURLs = try await nostrManager.blossomManager.uploadData(
-                imageData,
-                mimeType: "image/jpeg"
-            )
+            guard let blossomManager = nostrManager.blossomManager else {
+                throw NSError(domain: "StoryUpload", code: 0, userInfo: [NSLocalizedDescriptionKey: "Blossom manager not initialized"])
+            }
             
-            guard let imageURL = uploadedURLs.first else {
+            // Load user servers if not already loaded
+            await blossomManager.loadUserServers()
+            
+            // Upload to the first available server
+            guard let serverURL = blossomManager.userServers.first else {
+                throw NSError(domain: "StoryUpload", code: 0, userInfo: [NSLocalizedDescriptionKey: "No Blossom servers available"])
+            }
+            
+            let blob = try await blossomManager.upload(to: serverURL, data: imageData, mimeType: "image/jpeg")
+            let imageURL = blob.url
+            
+            guard !imageURL.isEmpty else {
                 throw NSError(domain: "StoryUpload", code: 0, userInfo: [NSLocalizedDescriptionKey: "Failed to upload image"])
             }
             

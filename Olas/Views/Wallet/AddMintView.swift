@@ -2,9 +2,9 @@ import SwiftUI
 
 struct AddMintView: View {
     @Environment(\.dismiss) private var dismiss
-    @ObservedObject var walletManager: OlasWalletManager
+    let onAdd: (URL) async -> Void
     @State private var mintURL = ""
-    @State private var isLoading = false
+    @State private var isValidating = false
     @State private var errorMessage: String?
     @FocusState private var isTextFieldFocused: Bool
     
@@ -25,9 +25,9 @@ struct AddMintView: View {
                     .padding()
                 
                 Button("Add Mint") {
-                    addMint()
+                    Task { await addMint() }
                 }
-                .disabled(mintURL.isEmpty || isLoading)
+                .disabled(mintURL.isEmpty || isValidating)
                 .padding()
                 
                 if let error = errorMessage {
@@ -49,14 +49,20 @@ struct AddMintView: View {
         }
     }
     
-    private func addMint() {
-        Task {
-            do {
-                try await walletManager.addMint(mintURL)
-                dismiss()
-            } catch {
-                errorMessage = error.localizedDescription
-            }
+    private func addMint() async {
+        guard let url = URL(string: mintURL), 
+              url.scheme != nil,
+              url.host != nil else {
+            errorMessage = "Please enter a valid URL"
+            return
         }
+        
+        isValidating = true
+        errorMessage = nil
+        
+        await onAdd(url)
+        dismiss()
+        
+        isValidating = false
     }
 }

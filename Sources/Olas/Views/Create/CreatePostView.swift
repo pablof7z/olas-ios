@@ -119,6 +119,8 @@ struct CreatePostView: View {
     
     private func createPost() {
         // Implement post creation logic
+        #if DEBUG
         print("Creating post with \(selectedImages.count) images")
+        #endif
     }
 }

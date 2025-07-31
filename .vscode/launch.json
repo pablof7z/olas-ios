@@ -1,0 +1,51 @@
+{
+    "configurations": [
+        {
+            "name": "Build with bun",
+            "request": "launch",
+            "cwd": "ndk-hooks",
+            "runtimeArgs": [
+                "run",
+                "build"
+            ]
+        },
+        {
+            "name": "Attach to Hermes application",
+            "request": "attach",
+            "type": "reactnativedirect",
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Debug Vitest with Bun",
+            "program": "${workspaceFolder}/node_modules/vitest/vitest.mjs",
+            "runtimeExecutable": "bun",
+            "args": [
+                "--run",
+                "--inspect-brk"
+            ],
+            "autoAttachChildProcesses": true,
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Olas}",
+            "name": "Debug Olas",
+            "program": "${workspaceFolder:Olas}/.build/debug/Olas",
+            "preLaunchTask": "swift: Build Debug Olas"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:Olas}",
+            "name": "Release Olas",
+            "program": "${workspaceFolder:Olas}/.build/release/Olas",
+            "preLaunchTask": "swift: Build Release Olas"
+        }
+    ]
+}

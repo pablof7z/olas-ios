@@ -418,16 +418,16 @@ struct CreatePostView: View {
     
     @MainActor
     private func performCreatePost() async {
-        guard let ndk = nostrManager.ndk else { return }
+        guard nostrManager.isInitialized else { return }
+        let ndk = nostrManager.ndk
         
         isPosting = true
         uploadProgress = 0.0
         
         do {
             // Get signer
-            let authManager = NDKAuthManager.shared
-            guard let signer = authManager.activeSigner else {
-                throw OlasError.invalidKey
+            guard let signer = nostrManager.authManager?.activeSigner else {
+                throw NDKError.notConfigured("No active signer")
             }
             
             // 1. Upload images to Blossom
@@ -463,7 +463,7 @@ struct CreatePostView: View {
                             size: size,
                             mimeType: mimeType,
                             signer: signer,
-                            ndk: nostrManager.ndk!,
+                            ndk: nostrManager.ndk,
                             expiration: Date().addingTimeInterval(60) // 1 minute expiration
                         )
                         

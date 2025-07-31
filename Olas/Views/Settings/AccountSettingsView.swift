@@ -1,16 +1,18 @@
 import SwiftUI
 import NDKSwift
+import NDKSwiftUI
 import CryptoKit
 
 struct AccountSettingsView: View {
     @EnvironmentObject var appState: AppState
+    @Environment(NostrManager.self) private var nostrManager
     @State private var showKeyBackup = false
     @State private var showCopyAlert = false
     @State private var copiedText = ""
     @State private var showBiometricToggle = false
     @State private var biometricEnabled = false
     @State private var showNsecWarning = false
-    @State private var userProfile: NDKUserProfile?
+    @State private var userMetadata: NDKUserMetadata?
     
     var body: some View {
         ZStack {
@@ -39,8 +41,13 @@ struct AccountSettingsView: View {
         .navigationBarTitleDisplayMode(.large)
         #endif
         .task {
-            if let currentUser = appState.currentUser {
-                userProfile = await currentUser.profile
+            if let currentUser = appState.currentUser,
+               let ndk = appState.nostrManager?.ndk {
+                // Load metadata for current user
+                for await metadata in await ndk.profileManager.subscribe(for: currentUser.pubkey, maxAge: 0) {
+                    userMetadata = metadata
+                    break
+                }
             }
         }
         .sheet(isPresented: $showKeyBackup) {
@@ -68,34 +75,18 @@ struct AccountSettingsView: View {
         VStack(spacing: OlasDesign.Spacing.lg) {
             // Avatar
             if let currentUser = appState.currentUser {
-                AsyncImage(url: URL(string: userProfile?.picture ?? "")) { image in
-                    image
-                        .resizable()
-                        .scaledToFill()
-                } placeholder: {
-                    Image(systemName: "person.circle.fill")
-                        .font(.system(size: 80))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [OlasDesign.Colors.primary, OlasDesign.Colors.secondary],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                }
-                .frame(width: 100, height: 100)
-                .clipShape(Circle())
-                .overlay(
-                    Circle()
-                        .stroke(OlasDesign.Colors.border, lineWidth: 2)
+                NDKUIProfilePicture(
+                    ndk: appState.nostrManager?.ndk ?? NDK(relayUrls: []),
+                    pubkey: currentUser.pubkey,
+                    size: 100
                 )
                 
                 VStack(spacing: OlasDesign.Spacing.sm) {
-                    Text(userProfile?.displayName ?? userProfile?.name ?? "Unknown")
+                    Text(userMetadata?.displayName ?? userMetadata?.name ?? "Unknown")
                         .font(OlasDesign.Typography.title2)
                         .foregroundColor(OlasDesign.Colors.text)
                     
-                    if let nip05 = userProfile?.nip05 {
+                    if let nip05 = userMetadata?.nip05 {
                         Text(nip05)
                             .font(OlasDesign.Typography.caption)
                             .foregroundColor(OlasDesign.Colors.textSecondary)
@@ -361,7 +352,7 @@ struct AccountSettingsView: View {
                     .padding(.top, OlasDesign.Spacing.xl)
                     
                     // Key display
-                    if let signer = NDKAuthManager.shared.activeSigner as? NDKPrivateKeySigner {
+                    if let signer = nostrManager.authManager?.activeSigner as? NDKPrivateKeySigner {
                         VStack(spacing: OlasDesign.Spacing.lg) {
                             // Hex format
                             keyDisplayBox(
@@ -437,7 +428,7 @@ struct AccountSettingsView: View {
     // MARK: - Methods
     
     private func copyPublicKey() {
-        guard let signer = NDKAuthManager.shared.activeSigner as? NDKPrivateKeySigner else { return }
+        guard let signer = nostrManager.authManager?.activeSigner as? NDKPrivateKeySigner else { return }
         
         Task {
             do {

@@ -1,5 +1,6 @@
 import SwiftUI
 import NDKSwift
+import NDKSwiftUI
 
 #if canImport(UIKit)
 import UIKit
@@ -15,7 +16,7 @@ struct OlasCaptionComposer: View {
     @State private var currentWord = ""
     @State private var cursorPosition: Int = 0
     @State private var suggestedUsers: [NDKUser] = []
-    @State private var suggestedProfiles: [String: NDKUserProfile] = [:]
+    @State private var suggestedMetadata: [String: NDKUserMetadata] = [:]
     
     // Popular hashtags
     let popularHashtags = [
@@ -64,72 +65,42 @@ struct OlasCaptionComposer: View {
     @ViewBuilder
     private var mentionSuggestions: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Suggestions")
-                .font(OlasDesign.Typography.caption)
-                .foregroundColor(OlasDesign.Colors.textTertiary)
-                .padding(.horizontal, OlasDesign.Spacing.sm)
-                .padding(.vertical, OlasDesign.Spacing.xs)
-            
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: OlasDesign.Spacing.sm) {
-                    ForEach(suggestedUsers.prefix(10), id: \.pubkey) { user in
-                        Button(action: {
-                            insertMention(user)
-                            OlasDesign.Haptic.selection()
-                        }) {
-                            HStack(spacing: OlasDesign.Spacing.xs) {
-                                // Avatar
-                                if let profile = suggestedProfiles[user.pubkey] {
-                                    OlasAvatar(
-                                        url: profile.picture,
-                                        size: 24,
-                                        pubkey: user.pubkey
-                                    )
-                                } else {
-                                    Circle()
-                                        .fill(OlasDesign.Colors.surface)
-                                        .frame(width: 24, height: 24)
-                                }
-                                
-                                // Name
-                                VStack(alignment: .leading, spacing: 0) {
-                                    if let profile = suggestedProfiles[user.pubkey] {
-                                        Text(profile.displayName ?? profile.name ?? "Unknown")
-                                            .font(OlasDesign.Typography.caption)
-                                            .foregroundColor(OlasDesign.Colors.text)
-                                        
-                                        if let name = profile.name {
-                                            Text("@\(name)")
-                                                .font(.system(size: 10))
-                                                .foregroundColor(OlasDesign.Colors.textTertiary)
-                                        }
-                                    } else {
-                                        Text(user.npub.prefix(16) + "...")
-                                            .font(OlasDesign.Typography.caption)
-                                            .foregroundColor(OlasDesign.Colors.textSecondary)
-                                    }
-                                }
-                            }
-                            .padding(.horizontal, OlasDesign.Spacing.sm)
-                            .padding(.vertical, OlasDesign.Spacing.xs)
-                            .background(OlasDesign.Colors.surface)
-                            .cornerRadius(16)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16)
-                                    .stroke(OlasDesign.Colors.border, lineWidth: 1)
-                            )
-                        }
-                    }
-                }
-                .padding(.horizontal, OlasDesign.Spacing.sm)
-            }
-            .frame(height: 44)
-            .task {
-                await loadProfilesForSuggestions()
-            }
+            suggestionHeader
+            suggestionScroll
         }
         .background(OlasDesign.Colors.surface.opacity(0.5))
         .cornerRadius(8)
+    }
+    
+    private var suggestionHeader: some View {
+        Text("Suggestions")
+            .font(OlasDesign.Typography.caption)
+            .foregroundColor(OlasDesign.Colors.textTertiary)
+            .padding(.horizontal, OlasDesign.Spacing.sm)
+            .padding(.vertical, OlasDesign.Spacing.xs)
+    }
+    
+    private var suggestionScroll: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: OlasDesign.Spacing.sm) {
+                ForEach(suggestedUsers.prefix(10), id: \.pubkey) { user in
+                    MentionSuggestionButton(
+                        user: user,
+                        metadata: suggestedMetadata[user.pubkey],
+                        ndk: nostrManager.ndk,
+                        onTap: {
+                            insertMention(user)
+                            OlasDesign.Haptic.selection()
+                        }
+                    )
+                }
+            }
+            .padding(.horizontal, OlasDesign.Spacing.sm)
+        }
+        .frame(height: 44)
+        .task {
+            await loadProfilesForSuggestions()
+        }
     }
     
     @ViewBuilder
@@ -180,40 +151,31 @@ struct OlasCaptionComposer: View {
     }
     
     private func searchUsers(_ query: String) {
-        guard let ndk = nostrManager.ndk else { return }
+        guard nostrManager.isInitialized else { return }
         
         Task {
             // Search for users by name/username
-            let filter = NDKFilter(
-                kinds: [EventKind.metadata],
-                limit: 20
-            )
-            
-            // For now, use empty array as we need to implement proper subscription
-            // TODO: Implement proper subscription to fetch metadata events
-            let events: [NDKEvent] = []
-            
-            var users: [NDKUser] = []
-            // Implement proper metadata search when subscription API is available
+            // TODO: Implement proper metadata search when subscription API is available
             // For now, return empty list
             
             await MainActor.run {
-                self.suggestedUsers = users
+                self.suggestedUsers = []
             }
         }
     }
     
     private func loadProfilesForSuggestions() async {
-        guard let profileManager = nostrManager.ndk?.profileManager else { return }
+        guard nostrManager.isInitialized,
+              let profileManager = nostrManager.ndk.profileManager else { return }
         
         for user in suggestedUsers {
-            if suggestedProfiles[user.pubkey] == nil {
+            if suggestedMetadata[user.pubkey] == nil {
                 Task {
-                    for await profile in await profileManager.observe(for: user.pubkey, maxAge: 3600) {
+                    for await metadata in await profileManager.subscribe(for: user.pubkey, maxAge: 3600) {
                         await MainActor.run {
-                            suggestedProfiles[user.pubkey] = profile
+                            suggestedMetadata[user.pubkey] = metadata
                         }
-                        break // Only need the first profile
+                        break // Only need the first metadata
                     }
                 }
             }
@@ -316,6 +278,55 @@ struct CaptionTextEditor: View {
     }
 }
 #endif
+
+// MARK: - Mention Suggestion Button
+
+struct MentionSuggestionButton: View {
+    let user: NDKUser
+    let metadata: NDKUserMetadata?
+    let ndk: NDK
+    let onTap: () -> Void
+    
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: OlasDesign.Spacing.xs) {
+                // Avatar
+                NDKUIProfilePicture(
+                    ndk: ndk,
+                    pubkey: user.pubkey,
+                    size: 24
+                )
+                
+                // Name
+                VStack(alignment: .leading, spacing: 0) {
+                    if let metadata = metadata {
+                        Text(metadata.displayName ?? metadata.name ?? "Unknown")
+                            .font(OlasDesign.Typography.caption)
+                            .foregroundColor(OlasDesign.Colors.text)
+                        
+                        if let name = metadata.name {
+                            Text("@\(name)")
+                                .font(.system(size: 10))
+                                .foregroundColor(OlasDesign.Colors.textTertiary)
+                        }
+                    } else {
+                        Text(user.npub.prefix(16) + "...")
+                            .font(OlasDesign.Typography.caption)
+                            .foregroundColor(OlasDesign.Colors.textSecondary)
+                    }
+                }
+            }
+            .padding(.horizontal, OlasDesign.Spacing.sm)
+            .padding(.vertical, OlasDesign.Spacing.xs)
+            .background(OlasDesign.Colors.surface)
+            .cornerRadius(16)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(OlasDesign.Colors.border, lineWidth: 1)
+            )
+        }
+    }
+}
 
 // MARK: - Preview
 

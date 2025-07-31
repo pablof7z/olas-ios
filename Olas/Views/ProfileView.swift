@@ -1,5 +1,6 @@
 import SwiftUI
 import NDKSwift
+import NDKSwiftUI
 
 struct ProfileView: View {
     let pubkey: String
@@ -22,7 +23,7 @@ struct ProfileView: View {
                 VStack(spacing: 0) {
                     // Profile Header with Parallax
                     ProfileHeaderView(
-                        profile: viewModel.profile,
+                        metadata: viewModel.metadata,
                         pubkey: pubkey,
                         scrollOffset: scrollOffset,
                         isFollowing: viewModel.isFollowing,
@@ -68,8 +69,8 @@ struct ProfileView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .onAppear {
-            if let ndk = nostrManager.ndk {
-                viewModel.startObserving(pubkey: pubkey, ndk: ndk)
+            if nostrManager.isInitialized {
+                viewModel.startObserving(pubkey: pubkey, ndk: nostrManager.ndk)
             }
         }
         .sheet(isPresented: $showFollowers) {
@@ -85,7 +86,7 @@ struct ProfileView: View {
 
 // MARK: - Profile Header
 struct ProfileHeaderView: View {
-    let profile: NDKUserProfile?
+    let metadata: NDKUserMetadata?
     let pubkey: String
     let scrollOffset: CGFloat
     let isFollowing: Bool
@@ -93,6 +94,7 @@ struct ProfileHeaderView: View {
     let followingCount: Int
     let postsCount: Int
     let onFollowToggle: () -> Void
+    @Environment(NostrManager.self) private var nostrManager
     
     private var parallaxOffset: CGFloat {
         scrollOffset > 0 ? -scrollOffset / 2 : 0
@@ -105,7 +107,7 @@ struct ProfileHeaderView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             // Banner Image with Parallax
-            if let banner = profile?.banner, let bannerURL = URL(string: banner) {
+            if let banner = metadata?.banner, let bannerURL = URL(string: banner) {
                 AsyncImage(url: bannerURL) { image in
                     image
                         .resizable()
@@ -128,10 +130,10 @@ struct ProfileHeaderView: View {
             // Profile Info
             VStack(spacing: OlasDesign.Spacing.md) {
                 // Avatar with 3D rotation
-                OlasAvatar(
-                    url: profile?.picture,
-                    size: 120,
-                    pubkey: pubkey
+                NDKUIProfilePicture(
+                    ndk: nostrManager.ndk,
+                    pubkey: pubkey,
+                    size: 120
                 )
                 .overlay(
                     Circle()
@@ -146,19 +148,19 @@ struct ProfileHeaderView: View {
                 
                 // Name and username
                 VStack(spacing: 4) {
-                    Text(profile?.displayName ?? profile?.name ?? String(pubkey.prefix(8)) + "...")
+                    Text(metadata?.displayName ?? metadata?.name ?? String(pubkey.prefix(8)) + "...")
                         .font(OlasDesign.Typography.title)
                         .foregroundColor(OlasDesign.Colors.text)
                         .olasTextShadow()
                     
-                    Text("@\(profile?.name ?? String(pubkey.prefix(8)))")
+                    Text("@\(metadata?.name ?? String(pubkey.prefix(8)))")
                         .font(OlasDesign.Typography.body)
                         .foregroundColor(OlasDesign.Colors.textSecondary)
                 }
                 .padding(.top, 70)
                 
                 // Bio
-                if let about = profile?.about {
+                if let about = metadata?.about {
                     Text(about)
                         .font(OlasDesign.Typography.body)
                         .foregroundColor(OlasDesign.Colors.text)
@@ -395,7 +397,7 @@ struct ProfileZapsView: View {
 // MARK: - View Model
 @MainActor
 class ProfileViewModel: ObservableObject {
-    @Published var profile: NDKUserProfile?
+    @Published var metadata: NDKUserMetadata?
     @Published var imagePosts: [ProfilePost] = []
     @Published var replies: [NDKEvent] = []
     @Published var zaps: [ZapInfo] = []
@@ -415,10 +417,10 @@ class ProfileViewModel: ObservableObject {
         Task {
             guard let profileManager = ndk.profileManager else { return }
             
-            for await profile in await profileManager.observe(for: pubkey, maxAge: 3600) {
-                if let profile = profile {
+            for await metadata in await profileManager.subscribe(for: pubkey, maxAge: 3600) {
+                if let metadata = metadata {
                     await MainActor.run {
-                        self.profile = profile
+                        self.metadata = metadata
                     }
                 }
             }
@@ -431,7 +433,7 @@ class ProfileViewModel: ObservableObject {
                 kinds: [EventKind.image]
             )
             
-            let dataSource = ndk.observe(filter: filter, cachePolicy: .cacheWithNetwork)
+            let dataSource = ndk.subscribe(filter: filter, cachePolicy: .cacheWithNetwork)
             
             for await event in dataSource.events {
                 // Extract image URLs using NDKEvent's built-in imeta support
@@ -510,11 +512,10 @@ class ProfileViewModel: ObservableObject {
             // Load following count from contact list (kind 3)
             let contactFilter = NDKFilter(
                 authors: [pubkey],
-                kinds: [3],  // Contact list
-                limit: 1
+                kinds: [3]  // Contact list
             )
             
-            let dataSource = ndk.observe(filter: contactFilter, cachePolicy: .cacheWithNetwork)
+            let dataSource = ndk.subscribe(filter: contactFilter, cachePolicy: .cacheWithNetwork)
             let events = await dataSource.collect(timeout: 3.0)
             if let contactList = events.first {
                 // Count 'p' tags in contact list
@@ -537,8 +538,6 @@ class ProfileViewModel: ObservableObject {
     }
     
     private func loadReplies() {
-        guard let ndk = ndk else { return }
-        
         // This section would need proper implementation:
         // - First load all posts by this user
         // - Then for each post, load comments with proper NIP-22 tags
@@ -579,7 +578,15 @@ struct ReplyCell: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: OlasDesign.Spacing.sm) {
-            OlasRichText(content: event.content, tags: event.tags)
+            NDKUIRichTextView(
+                content: event.content,
+                tags: event.tags.map { Tag($0) },
+                showLinkPreviews: false,
+                style: .compact
+            )
+            .font(OlasDesign.Typography.body)
+            .foregroundColor(OlasDesign.Colors.text)
+            .tint(Color.white)
             
             Text(Date(timeIntervalSince1970: Double(event.createdAt)).formatted(.relative(presentation: .named)))
                 .font(OlasDesign.Typography.caption)

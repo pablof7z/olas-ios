@@ -1,13 +1,15 @@
 import SwiftUI
 import NDKSwift
+import NDKSwiftUI
 
 struct ExploreGridItem: View {
     let post: NDKEvent
-    let profile: NDKUserProfile?
+    let metadata: NDKUserMetadata?
     let height: CGFloat
     
     @State private var imageUrls: [String] = []
     @State private var showingPost = false
+    @Environment(NostrManager.self) private var nostrManager
     
     var body: some View {
         NavigationLink(destination: PostDetailView(event: post)) {
@@ -50,13 +52,13 @@ struct ExploreGridItem: View {
                 VStack(alignment: .leading, spacing: 4) {
                     // Profile info
                     HStack(spacing: OlasDesign.Spacing.xs) {
-                        OlasAvatar(
-                            url: profile?.picture,
-                            size: 24,
-                            pubkey: post.pubkey
+                        NDKUIProfilePicture(
+                            ndk: nostrManager.ndk,
+                            pubkey: post.pubkey,
+                            size: 24
                         )
                         
-                        Text(profile?.displayName ?? profile?.name ?? "...")
+                        Text(metadata?.displayName ?? metadata?.name ?? "...")
                             .font(OlasDesign.Typography.caption)
                             .foregroundColor(.white)
                             .lineLimit(1)

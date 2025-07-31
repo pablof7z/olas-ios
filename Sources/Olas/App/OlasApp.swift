@@ -15,13 +15,10 @@ struct OlasApp: App {
 }
 
 enum AuthError: LocalizedError {
-    case noNDK
     case invalidKey
     
     var errorDescription: String? {
         switch self {
-        case .noNDK:
-            return "NDK not initialized"
         case .invalidKey:
             return "Invalid private key"
         }
@@ -30,7 +27,7 @@ enum AuthError: LocalizedError {
 
 @MainActor
 class AppState: ObservableObject {
-    @Published var ndk: NDK?
+    @Published var ndk: NDK
     @Published var currentUser: NDKUser?
     @Published var isAuthenticated = false
     
@@ -41,21 +38,20 @@ class AppState: ObservableObject {
     }
     
     init() {
+        // Initialize NDK synchronously
+        ndk = NDK()
         setupNDK()
     }
     
     // MARK: - Authentication Methods
     
     func createAccount() async throws {
-        guard let ndk = ndk else { throw AuthError.noNDK }
-        
         let signer = try NDKPrivateKeySigner.generate()
         
         // Create persistent auth session
-        let session = try await authManager.createSession(
-            with: signer,
-            requiresBiometric: false,
-            isHardwareBacked: false
+        let session = try await authManager.addSession(
+            signer,
+            requiresBiometric: false
         )
         
         // Start NDK session
@@ -71,15 +67,12 @@ class AppState: ObservableObject {
     }
     
     func importAccount(nsec: String) async throws {
-        guard let ndk = ndk else { throw AuthError.noNDK }
-        
         let signer = try NDKPrivateKeySigner(nsec: nsec)
         
         // Create persistent auth session
-        let session = try await authManager.createSession(
-            with: signer,
-            requiresBiometric: false,
-            isHardwareBacked: false
+        let session = try await authManager.addSession(
+            signer,
+            requiresBiometric: false
         )
         
         // Start NDK session
@@ -96,9 +89,7 @@ class AppState: ObservableObject {
     
     func logout() async {
         // Clear all sessions from keychain
-        for session in authManager.availableSessions {
-            try? await authManager.deleteSession(session)
-        }
+        try? await authManager.clearAllSessions()
         
         // Clear memory state
         authManager.logout()
@@ -112,25 +103,22 @@ class AppState: ObservableObject {
     private func setupNDK() {
         Task {
             do {
-                ndk = NDK()
                 // Add default relays
-                try await ndk?.addRelay("wss://relay.damus.io")
-                try await ndk?.addRelay("wss://relay.nostr.band")
-                try await ndk?.addRelay("wss://nos.lol")
-                try await ndk?.connect()
+                try await ndk.addRelay("wss://relay.damus.io")
+                try await ndk.addRelay("wss://relay.nostr.band")
+                try await ndk.addRelay("wss://nos.lol")
+                try await ndk.connect()
                 
                 // Set NDK on auth manager and initialize
-                if let ndk = ndk {
-                    authManager.setNDK(ndk)
-                    await authManager.initialize()
-                    
-                    // Update authentication state
-                    isAuthenticated = authManager.isAuthenticated
-                    
-                    // If authenticated, set the signer on NDK
-                    if let signer = authManager.activeSigner {
-                        ndk.signer = signer
-                    }
+                authManager.setNDK(ndk)
+                await authManager.initialize()
+                
+                // Update authentication state
+                isAuthenticated = authManager.hasActiveSession
+                
+                // If authenticated, set the signer on NDK
+                if let signer = authManager.activeSigner {
+                    ndk.signer = signer
                 }
             } catch {
                 print("Failed to setup NDK: \(error)")

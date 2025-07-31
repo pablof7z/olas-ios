@@ -29,7 +29,7 @@ class StoriesManager: ObservableObject {
     func startObservingStories() {
         storiesTask?.cancel()
         
-        guard let ndk = nostrManager.ndk else { return }
+        guard nostrManager.isInitialized else { return }
         
         storiesTask = Task {
             isLoading = true
@@ -42,7 +42,7 @@ class StoriesManager: ObservableObject {
                 since: since
             )
             
-            let dataSource = ndk.observe(
+            let dataSource = nostrManager.ndk.subscribe(
                 filter: filter,
                 maxAge: 0,
                 cachePolicy: .cacheWithNetwork
@@ -74,7 +74,7 @@ class StoriesManager: ObservableObject {
                 loadProfileForAuthor(event.pubkey)
                 
                 // Check if current user has active story
-                if let signer = ndk.signer,
+                if let signer = nostrManager.ndk.signer,
                    let signerPubkey = try? await signer.pubkey,
                    event.pubkey == signerPubkey {
                     hasActiveStory = true
@@ -89,8 +89,8 @@ class StoriesManager: ObservableObject {
         var collections: [UserStoryCollection] = []
         
         // Current user's stories first
-        if let ndk = nostrManager.ndk,
-           let signer = ndk.signer,
+        if nostrManager.isInitialized,
+           let signer = nostrManager.ndk.signer,
            let currentUserPubkey = try? await signer.pubkey,
            let currentStories = storiesByAuthor[currentUserPubkey] {
             let sortedStories = currentStories.sorted { $0.timestamp > $1.timestamp }
@@ -103,8 +103,8 @@ class StoriesManager: ObservableObject {
         
         // Other users' stories
         for (pubkey, stories) in storiesByAuthor {
-            if let ndk = nostrManager.ndk,
-               let signer = ndk.signer,
+            if nostrManager.isInitialized,
+               let signer = nostrManager.ndk.signer,
                let signerPubkey = try? await signer.pubkey,
                pubkey != signerPubkey {
                 let sortedStories = stories.sorted { $0.timestamp > $1.timestamp }
@@ -127,17 +127,18 @@ class StoriesManager: ObservableObject {
     }
     
     private func loadProfileForAuthor(_ pubkey: String) {
-        guard let profileManager = nostrManager.ndk?.profileManager else { return }
+        guard nostrManager.isInitialized,
+              let profileManager = nostrManager.ndk.profileManager else { return }
         
         profileTasks[pubkey]?.cancel()
         
         profileTasks[pubkey] = Task {
-            for await profile in await profileManager.observe(for: pubkey, maxAge: 3600) {
-                if let profile = profile {
+            for await metadata in await profileManager.subscribe(for: pubkey, maxAge: 3600) {
+                if let metadata = metadata {
                     // Update all stories for this author
                     for index in userStories.indices {
                         if userStories[index].authorPubkey == pubkey {
-                            userStories[index].authorProfile = profile
+                            userStories[index].authorMetadata = metadata
                         }
                     }
                 }
@@ -147,8 +148,8 @@ class StoriesManager: ObservableObject {
     }
     
     func createStory(with imageData: Data, caption: String, filters: [String] = []) async throws {
-        guard let ndk = nostrManager.ndk,
-              let signer = ndk.signer else {
+        guard nostrManager.isInitialized,
+              let signer = nostrManager.ndk.signer else {
             throw StoryError.notAuthenticated
         }
         
@@ -184,13 +185,13 @@ class StoriesManager: ObservableObject {
             ])
         }
         
-        let storyEvent = try await NDKEventBuilder(ndk: ndk)
+        let storyEvent = try await NDKEventBuilder(ndk: nostrManager.ndk)
             .kind(storyKind)
             .content(caption)
             .tags(tags)
             .build(signer: signer)
         
-        _ = try await ndk.publish(storyEvent)
+        _ = try await nostrManager.ndk.publish(storyEvent)
         
         // Update local state
         hasActiveStory = true
@@ -200,13 +201,13 @@ class StoriesManager: ObservableObject {
     }
     
     func deleteStory(_ storyId: String) async throws {
-        guard let ndk = nostrManager.ndk,
-              let signer = ndk.signer else {
+        guard nostrManager.isInitialized,
+              let signer = nostrManager.ndk.signer else {
             throw StoryError.notAuthenticated
         }
         
         // Create deletion event
-        let deletionEvent = try await NDKEventBuilder(ndk: ndk)
+        let deletionEvent = try await NDKEventBuilder(ndk: nostrManager.ndk)
             .kind(EventKind.deletion)
             .content("Story deleted")
             .tags([
@@ -215,7 +216,7 @@ class StoriesManager: ObservableObject {
             ])
             .build(signer: signer)
         
-        _ = try await ndk.publish(deletionEvent)
+        _ = try await nostrManager.ndk.publish(deletionEvent)
         
         // Update local state
         if let currentUserPubkey = try? await signer.pubkey {
@@ -257,7 +258,7 @@ class StoriesManager: ObservableObject {
 struct UserStoryCollection: Identifiable {
     let id = UUID()
     let authorPubkey: String
-    var authorProfile: NDKUserProfile?
+    var authorMetadata: NDKUserMetadata?
     var stories: [Story]
     let isCurrentUser: Bool
     
@@ -271,7 +272,7 @@ struct UserStoryCollection: Identifiable {
 struct EnhancedStory: Identifiable {
     let id: String
     let authorPubkey: String
-    var authorProfile: NDKUserProfile?
+    var authorMetadata: NDKUserMetadata?
     let content: String
     let mediaURLs: [String]
     let filters: [String]
