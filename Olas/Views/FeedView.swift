@@ -323,12 +323,12 @@ struct FeedItemView: View {
             // Content with rich text
             if !item.event.content.isEmpty {
                 NDKUIRichTextView(
+                    ndk: nostrManager.ndk,
                     content: item.event.content,
                     tags: item.event.tags.map { Tag($0) },
                     showLinkPreviews: false,
                     style: .compact
                 )
-                .environment(\.ndk, nostrManager.ndk)
                 .font(OlasDesign.Typography.body)
                 .foregroundColor(OlasDesign.Colors.text)
                 .tint(Color.white)

@@ -575,10 +575,12 @@ struct ZapInfo: Identifiable {
 
 struct ReplyCell: View {
     let event: NDKEvent
+    @Environment(NostrManager.self) private var nostrManager
     
     var body: some View {
         VStack(alignment: .leading, spacing: OlasDesign.Spacing.sm) {
             NDKUIRichTextView(
+                ndk: nostrManager.ndk,
                 content: event.content,
                 tags: event.tags.map { Tag($0) },
                 showLinkPreviews: false,

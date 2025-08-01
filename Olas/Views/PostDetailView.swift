@@ -56,12 +56,12 @@ struct PostDetailView: View {
                         
                         // Content
                         NDKUIRichTextView(
+                            ndk: nostrManager.ndk,
                             content: event.content,
                             tags: event.tags.map { Tag($0) },
                             showLinkPreviews: false,
                             style: .compact
                         )
-                        .environment(\.ndk, nostrManager.ndk)
                         .font(OlasDesign.Typography.body)
                         .foregroundColor(OlasDesign.Colors.text)
                         .tint(Color.white)
