@@ -4,10 +4,6 @@ import NDKSwiftUI
 import SwiftUI
 import Combine
 
-// MARK: - Type Aliases for Compatibility
-
-typealias UserProfileDataSource = NDKUIUserProfileDataSource
-
 // MARK: - Image Feed Data Source
 
 /// Data source for image posts (kind 1 with image tags) - uses NDKEventDataSource

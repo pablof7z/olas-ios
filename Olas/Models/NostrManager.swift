@@ -323,8 +323,3 @@ class NostrManager: ObservableObject {
         }
     }
 }
-
-// MARK: - Error Types
-
-// Use NDKError from NDKSwift instead of creating custom errors
-typealias OlasError = NDKError

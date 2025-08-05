@@ -1,7 +1,7 @@
 import SwiftUI
 import Charts
 
-struct OlasEnhancedBalanceCard: View {
+struct BalanceCard: View {
     @Environment(NostrManager.self) private var nostrManager
     @State private var isExpanded = false
     @State private var showingBreakdown = false

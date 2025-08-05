@@ -150,7 +150,7 @@ struct OlasWalletView: View {
     private var walletContentView: some View {
         ScrollView {
             VStack(spacing: OlasDesign.Spacing.lg) {
-                OlasEnhancedBalanceCard()
+                BalanceCard()
                     .padding(.horizontal, OlasDesign.Spacing.md)
                     .padding(.top, OlasDesign.Spacing.sm)
                 
